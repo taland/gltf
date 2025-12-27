@@ -1,0 +1,31 @@
+# Build outputs
+/build/
+/bin/
+
+# CMake generated
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+*.cmake.user
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Toolchain / misc
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+*.exe
+*.pdb
