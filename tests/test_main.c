@@ -5,7 +5,9 @@
 gltf_doc* g_doc = NULL;
 
 // Test declarations
-void test_load_sample_minimal(void);
+void test_01_load_sample_minimal(void);
+void test_02_load_positions_and_indices(void);
+void test_02_embedded_load_positions(void);
 
 void setUp(void) {
     g_doc = NULL;
@@ -20,7 +22,9 @@ void tearDown(void) {
 int main(void) {
   UNITY_BEGIN();
 
-  RUN_TEST(test_load_sample_minimal);
+  RUN_TEST(test_01_load_sample_minimal);
+  RUN_TEST(test_02_load_positions_and_indices);
+  RUN_TEST(test_02_embedded_load_positions);
 
   return UNITY_END();
 }

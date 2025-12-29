@@ -33,6 +33,8 @@ if(CMAKE_CONFIGURATION_TYPES)
 endif()
 
 add_library(gltf STATIC
+  src/base64.c
+  src/fs.c
   src/gltf.c
 )
 
@@ -72,7 +74,8 @@ if(GLTF_BUILD_TESTS)
 
   add_executable(gltf_tests
     tests/test_main.c
-    tests/test_load_minimal.c
+    tests/test_01_minimal.c
+    tests/test_02_positions_and_indices.c
     third_party/unity/unity.c
   )
 

@@ -26,6 +26,40 @@ typedef enum gltf_result {
   GLTF_ERR_INVALID  // invalid arguments passed by the caller
 } gltf_result;
 
+// Span-like view of accessor data.
+//
+// Represents a safe, bounds-checked window over typed data stored in a buffer.
+// The span does NOT own the memory; all memory is owned by the document.
+//
+// Layout:
+//   element i starts at: ptr + i * stride
+//   packed element size (without stride padding): elem_size
+typedef struct gltf_span {
+  const uint8_t* ptr;   // Pointer to the first element (element 0)
+  uint32_t count;       // Number of elements in the accessor
+  uint32_t stride;      // Byte stride between consecutive elements
+  uint32_t elem_size;   // Packed size of a single element (in bytes)
+} gltf_span;
+
+// glTF accessor componentType values (glTF 2.0 specification).
+typedef enum gltf_component_type {
+  GLTF_COMP_I8   = 5120, // BYTE
+  GLTF_COMP_U8   = 5121, // UNSIGNED_BYTE
+  GLTF_COMP_I16  = 5122, // SHORT
+  GLTF_COMP_U16  = 5123, // UNSIGNED_SHORT
+  GLTF_COMP_U32  = 5125, // UNSIGNED_INT
+  GLTF_COMP_F32  = 5126, // FLOAT
+} gltf_component_type;
+
+// glTF accessor type values (number of components per element).
+typedef enum gltf_accessor_type {
+  GLTF_ACCESSOR_SCALAR = 1, // 1 component
+  GLTF_ACCESSOR_VEC2,       // 2 components
+  GLTF_ACCESSOR_VEC3,       // 3 components
+  GLTF_ACCESSOR_VEC4,       // 4 components
+  GLTF_ACCESSOR_MAT4,       // 16 components (column-major)
+} gltf_accessor_type;
+
 // Loads a glTF 2.0 JSON (.gltf) file.
 //
 // Success:
@@ -119,6 +153,89 @@ int gltf_doc_node_child(const gltf_doc* doc,
 // Returns the mesh name, or NULL if the mesh is unnamed.
 // Returns NULL if doc is NULL or mesh_index is out of range.
 const char* gltf_doc_mesh_name(const gltf_doc* doc, uint32_t mesh_index);
+
+// Returns the number of accessors in the document.
+// Returns 0 if doc is NULL.
+uint32_t gltf_doc_accessor_count(const gltf_doc* doc);
+
+// Returns basic metadata for the accessor at accessor_index.
+//
+// On success:
+//   - returns 1
+//   - writes accessor properties to the provided output pointers
+//
+// On failure (doc NULL, accessor_index out of range):
+//   - returns 0
+//   - output parameters are not modified
+//
+// Notes:
+//   - out_component_type is one of gltf_component_type values
+//   - out_type is one of gltf_accessor_type values
+//   - out_normalized is non-zero if the accessor has normalized=true
+int gltf_doc_accessor_info(const gltf_doc* doc,
+                           uint32_t accessor_index,
+                           uint32_t* out_count,
+                           uint32_t* out_component_type,
+                           uint32_t* out_type,
+                           int* out_normalized);
+
+// Returns a span-like view over the accessor's underlying buffer data.
+//
+// The returned span provides direct read-only access to the raw bytes
+// described by the accessor, taking into account:
+//   - buffer
+//   - bufferView.byteOffset
+//   - accessor.byteOffset
+//   - bufferView.byteStride (if present)
+//
+// On success:
+//   - returns GLTF_OK
+//   - fills out_span with a valid view into document-owned memory
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID if arguments are invalid
+//   - returns GLTF_ERR_PARSE if the accessor or buffer layout is invalid
+//   - out_span is not modified
+//
+// The returned span is valid until gltf_free() is called on the document.
+gltf_result gltf_accessor_span(const gltf_doc* doc,
+                               uint32_t accessor_index,
+                               gltf_span* out_span,
+                               gltf_error* out_err);
+
+// Reads element i of the accessor and decodes it into floating-point values.
+//
+// The decoded values are written to the 'out' array in component order.
+// The number of components written depends on the accessor type:
+//
+//   SCALAR -> 1
+//   VEC2   -> 2
+//   VEC3   -> 3
+//   VEC4   -> 4
+//   MAT4   -> 16
+//
+// Component values are converted to float according to componentType.
+// If the accessor has normalized=true, integer values are normalized
+// to the range [0, 1] or [-1, 1] as defined by the glTF specification.
+//
+// On success:
+//   - returns GLTF_OK
+//   - writes decoded float values to out[]
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID if arguments are invalid or i is out of range
+//   - returns GLTF_ERR_PARSE if the accessor layout is invalid
+//   - out is not modified
+//
+// Requirements:
+//   - out_cap must be large enough to hold all components
+//     (16 floats is sufficient for all supported types).
+gltf_result gltf_accessor_read_f32(const gltf_doc* doc,
+                                   uint32_t accessor_index,
+                                   uint32_t i,
+                                   float* out,
+                                   uint32_t out_cap,
+                                   gltf_error* out_err);
 
 #ifdef __cplusplus
 }

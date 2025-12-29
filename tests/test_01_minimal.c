@@ -10,12 +10,12 @@
 
 extern gltf_doc* g_doc;
 
-static const char* sample_minimal_path(void) {
-  return GLTF_REPO_ROOT "/examples/sample_01_minimal.gltf";
+static const char* sample_path(void) {
+  return GLTF_REPO_ROOT "/tests/fixtures/01_minimal.gltf";
 }
 
-void test_load_sample_minimal(void) {
-  const char* path = sample_minimal_path();
+void test_01_load_sample_minimal(void) {
+  const char* path = sample_path();
 
   gltf_error err = {0};
 
