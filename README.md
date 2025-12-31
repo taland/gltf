@@ -1,6 +1,6 @@
 # glTF (C11)
 
-This repository is an early C11 + CMake skeleton for a `gltf` static library and a small example.
+Minimal C11 + CMake project that builds a `gltf` static library, a small example, and tests.
 
 ## Build
 
@@ -35,13 +35,13 @@ Configure/build as usual:
 
 ```sh
 cmake -S . -B build
-cmake --build build
+cmake --build build [--clean-first]
 ```
 
 Run via CTest:
 
 ```sh
-ctest --test-dir build
+ctest --test-dir build [--output-on-failure]
 ```
 
 Or run the test binary directly:

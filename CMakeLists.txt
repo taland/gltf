@@ -35,7 +35,14 @@ endif()
 add_library(gltf STATIC
   src/base64.c
   src/fs.c
-  src/gltf.c
+  src/gltf_accessor.c
+  src/gltf_decode.c
+  src/gltf_doc.c
+  src/gltf_memory.c
+  src/gltf_parse.c
+  src/gltf_primitive.c
+  src/gltf_query.c
+  src/gltf_util.c
 )
 
 # Do NOT expose yyjson as a public dependency of gltf.

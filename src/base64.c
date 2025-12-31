@@ -1,9 +1,27 @@
+// Minimal educational glTF 2.0 loader (C11).
+//
+// This module provides a small base64 decoder used for data: URIs.
+//
+// Responsibilities:
+//   - compute a safe upper bound for decoded size
+//   - decode base64 payloads while skipping ASCII whitespace
+//
+// Notes:
+//   - This is an internal helper used by src/gltf_parse.c.
+//   - The decoder is strict: padding must be final; only whitespace may follow.
+
+
 #include <stdint.h>
 #include <stddef.h>
 
 #define B64_INVALID 0u
 #define B64_PAD     0xFEu
 #define B64_SKIP    0xFFu
+
+
+// ----------------------------------------------------------------------------
+// Lookup table
+// ----------------------------------------------------------------------------
 
 static const uint8_t k_b64_lut[256] = {
   ['A']=1,  ['B']=2,  ['C']=3,  ['D']=4,  ['E']=5,  ['F']=6,  ['G']=7,
@@ -31,13 +49,20 @@ static const uint8_t k_b64_lut[256] = {
   ['\v'] = B64_SKIP,
 };
 
+// ----------------------------------------------------------------------------
+// Base64 decode
+// ----------------------------------------------------------------------------
+
+// Returns an upper bound on the decoded size for an input string length.
+//
+// Notes:
+//   - This is conservative (whitespace may reduce the actual decoded size).
 size_t gltf_base64_max_decoded_size(size_t in_len) {
-  // Upper bound: every 4 chars -> up to 3 bytes. Add 3 for rounding.
-  // Conservative; may over-allocate if whitespace is present.
   if (in_len > (SIZE_MAX / 3u) * 4u) return SIZE_MAX;
   return (in_len / 4u) * 3u + 3u;
 }
 
+// Decodes base64 data into out[] and writes the decoded byte count to *out_len.
 int gltf_base64_decode(const char* in, size_t in_len,
                        uint8_t* out, size_t out_cap,
                        size_t* out_len) {

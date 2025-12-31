@@ -1,3 +1,18 @@
+// Minimal educational glTF 2.0 loader (C11).
+//
+// This module provides small file system helpers used by the loader.
+//
+// Responsibilities:
+//   - compute a directory prefix length from a path
+//   - join a base directory and leaf path into a malloc()'d string
+//   - read an entire file (or an expected number of bytes)
+//
+// Notes:
+//   - These helpers are internal; public API contracts live in include/gltf/gltf.h.
+//   - Paths accept both '/' and '\\' as separators; Windows absolute paths are
+//     recognized when built with _WIN32.
+
+
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -12,6 +27,11 @@ typedef enum gltf_fs_status {
   GLTF_FS_SIZE_MISMATCH,
   GLTF_FS_TOO_LARGE
 } gltf_fs_status;
+
+
+// ----------------------------------------------------------------------------
+// Paths
+// ----------------------------------------------------------------------------
 
 static int gltf_fs_is_abs(const char* path) {
   if (!path || path[0] == '\0') return 0;
@@ -29,13 +49,15 @@ static int gltf_fs_is_abs(const char* path) {
 #endif
 }
 
-// Returns number of bytes in directory prefix INCLUDING the last separator.
-// Example: "/a/b/c.gltf" -> 5 ("/a/b/")
-//          "c.gltf"      -> 0
+// Returns the directory prefix length in bytes, including the trailing separator.
+//
+// Notes:
+//   - Trailing separators are trimmed before scanning.
+//   - Both '/' and '\\' are treated as separators.
 size_t gltf_fs_dir_len(const char* path) {
   if (!path) return 0;
   size_t n = strlen(path);
-  while (n > 0 && (path[n - 1] == '/' || path[n - 1] == '\\')) n--; // trim trailing separators
+  while (n > 0 && (path[n - 1] == '/' || path[n - 1] == '\\')) n--; // trim
   for (size_t i = n; i > 0; i--) {
     char c = path[i - 1];
     if (c == '/' || c == '\\') return i; // include separator
@@ -43,8 +65,11 @@ size_t gltf_fs_dir_len(const char* path) {
   return 0;
 }
 
-// Joins dir_prefix[0..dir_len) + leaf into malloc'd string.
-// If leaf is absolute, returns a copy of leaf (ignores dir).
+// Joins dir_prefix[0..dir_len) and leaf into a malloc()'d path.
+//
+// Notes:
+//   - If leaf is absolute, returns a copy of leaf (dir_prefix is ignored).
+//   - dir_len is expected to include the trailing separator.
 char* gltf_fs_join_dir_leaf(const char* dir_prefix, size_t dir_len, const char* leaf) {
   if (!leaf) return NULL;
 
@@ -58,8 +83,7 @@ char* gltf_fs_join_dir_leaf(const char* dir_prefix, size_t dir_len, const char* 
 
   size_t leaf_len = strlen(leaf);
 
-  // Ensure exactly one separator between dir and leaf:
-  // your dir_len already "includes separator", so we just concatenate.
+  // dir_len already includes the trailing separator.
   if (dir_len > SIZE_MAX - (leaf_len + 1)) return NULL;
   size_t total = dir_len + leaf_len + 1;
 
@@ -70,8 +94,11 @@ char* gltf_fs_join_dir_leaf(const char* dir_prefix, size_t dir_len, const char* 
   return s;
 }
 
-// Reads exactly expected_len bytes from file. Allocates *out_data with malloc.
-// If expected_len==0: reads the entire file (size determined by ftell).
+// Reads a file into a malloc()'d buffer.
+//
+// Notes:
+//   - If expected_len is non-zero, the file size must match exactly.
+//   - If expected_len is zero, reads the entire file.
 gltf_fs_status gltf_fs_read_file_exact_u32(const char* path,
                                            uint32_t expected_len,
                                            uint8_t** out_data,
