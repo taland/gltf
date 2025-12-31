@@ -1,0 +1,79 @@
+# Top-level EditorConfig file
+root = true
+
+# ----------------------------------------
+# Default settings for all files
+# ----------------------------------------
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ----------------------------------------
+# C / C++ source files
+# ----------------------------------------
+[*.{c,h,cpp,hpp}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+# IMPORTANT:
+# Do NOT enforce max_line_length here.
+# clang-format controls wrapping (ColumnLimit: 100).
+# This avoids editor vs formatter conflicts.
+max_line_length = off
+
+# ----------------------------------------
+# CMake files
+# ----------------------------------------
+[*.cmake]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = off
+
+[CMakeLists.txt]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = off
+
+# ----------------------------------------
+# JSON / glTF files
+# ----------------------------------------
+[*.{json,gltf}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = off
+
+# ----------------------------------------
+# YAML (clang-format, CI, etc.)
+# ----------------------------------------
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+# ----------------------------------------
+# Markdown / docs
+# ----------------------------------------
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# ----------------------------------------
+# Shell scripts
+# ----------------------------------------
+[*.sh]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+# ----------------------------------------
+# Binary / generated files
+# ----------------------------------------
+[*.{bin,glb}]
+insert_final_newline = false
+trim_trailing_whitespace = false

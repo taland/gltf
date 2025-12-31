@@ -57,8 +57,11 @@ typedef enum gltf_accessor_type {
   GLTF_ACCESSOR_VEC2,       // 2 components
   GLTF_ACCESSOR_VEC3,       // 3 components
   GLTF_ACCESSOR_VEC4,       // 4 components
+  GLTF_ACCESSOR_MAT2,       // 4 components (column-major)
+  GLTF_ACCESSOR_MAT3,       // 9 components (column-major)
   GLTF_ACCESSOR_MAT4,       // 16 components (column-major)
 } gltf_accessor_type;
+
 
 // Loads a glTF 2.0 JSON (.gltf) file.
 //
@@ -75,6 +78,11 @@ gltf_result gltf_load_file(const char* path, gltf_doc** out_doc, gltf_error* out
 // Frees all memory owned by the document.
 // Safe to call with NULL.
 void gltf_free(gltf_doc* doc);
+
+
+// ----------------------------------------------------------------------------
+// Scenes / Nodes / Meshes (basic)
+// ----------------------------------------------------------------------------
 
 // Returns the number of scenes in the document.
 // Returns 0 if doc is NULL.
@@ -153,6 +161,209 @@ int gltf_doc_node_child(const gltf_doc* doc,
 // Returns the mesh name, or NULL if the mesh is unnamed.
 // Returns NULL if doc is NULL or mesh_index is out of range.
 const char* gltf_doc_mesh_name(const gltf_doc* doc, uint32_t mesh_index);
+
+
+// ----------------------------------------------------------------------------
+// Mesh primitives (POSITION/indices)
+// ----------------------------------------------------------------------------
+//
+// Notes:
+//   - A mesh can have multiple primitives (each primitive is a draw call).
+//   - We expose only:
+//       * POSITION accessor (required by our loader contract)
+//       * indices accessor (optional)
+//
+// Coordinate space:
+//   - Accessor POSITION data is stored in mesh-local coordinates.
+//   - Nodes (and scenes) later provide transforms to place the mesh in world space.
+
+// Returns the number of primitives referenced by the mesh.
+// Returns 0 if doc is NULL or mesh_index is out of range.
+uint32_t gltf_doc_mesh_primitive_count(const gltf_doc* doc, uint32_t mesh_index);
+
+// Returns the primitive index (into the document primitive array) for mesh primitive prim_i.
+//
+// On success:
+//   - returns 1
+//   - writes the primitive index to *out_primitive_index
+//
+// On failure (doc NULL, out_primitive_index NULL, out of range):
+//   - returns 0
+//   - *out_primitive_index is not modified
+int gltf_doc_mesh_primitive(const gltf_doc* doc,
+                            uint32_t mesh_index,
+                            uint32_t prim_i,
+                            uint32_t* out_primitive_index);
+
+// Returns the POSITION and indices accessors for mesh primitive prim_i.
+//
+// On success:
+//   - returns 1
+//   - writes accessor indices to outputs
+//   - *out_indices_accessor is set to -1 if indices are absent
+//
+// On failure (doc NULL, outputs NULL, out of range):
+//   - returns 0
+//   - output parameters are not modified
+int gltf_mesh_primitive_get_accessors(const gltf_doc* doc,
+                                      uint32_t mesh_index,
+                                      uint32_t prim_i,
+                                      uint32_t* out_position_accessor,
+                                      int32_t* out_indices_accessor);
+
+// Returns a span over the primitive POSITION accessor (VEC3).
+//
+// On success:
+//   - returns GLTF_OK
+//   - fills out_span with a valid view of positions (count = vertex count)
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID if arguments are invalid
+//   - returns GLTF_ERR_PARSE if the primitive/accessor layout is invalid
+//   - out_span is not modified
+gltf_result gltf_mesh_primitive_position_span(const gltf_doc* doc,
+                                              uint32_t mesh_index,
+                                              uint32_t prim_i,
+                                              gltf_span* out_span,
+                                              gltf_error* out_err);
+
+// Reads primitive POSITION[vertex_i] and decodes into out_xyz[3] (float).
+//
+// On success:
+//   - returns GLTF_OK
+//   - writes 3 floats to out_xyz
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID if arguments are invalid or vertex_i is out of range
+//   - returns GLTF_ERR_PARSE if the primitive/accessor layout is invalid
+//   - out_xyz is not modified
+gltf_result gltf_mesh_primitive_read_position_f32(const gltf_doc* doc,
+                                                  uint32_t mesh_index,
+                                                  uint32_t prim_i,
+                                                  uint32_t vertex_i,
+                                                  float out_xyz[3],
+                                                  gltf_error* out_err);
+
+// Returns non-zero if the primitive has indices.
+// Returns 0 if doc is NULL, out of range, or indices are absent.
+int gltf_mesh_primitive_has_indices(const gltf_doc* doc,
+                                    uint32_t mesh_index,
+                                    uint32_t prim_i);
+
+// Returns the number of indices for the primitive.
+//
+// For indexed primitives:
+//   - out_count == accessor.count of the indices accessor
+//
+// For non-indexed primitives:
+//   - returns GLTF_OK
+//   - out_count == vertex_count (same as POSITION accessor count)
+//
+// On success:
+//   - returns GLTF_OK
+//   - writes count to *out_count
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID if arguments are invalid
+//   - returns GLTF_ERR_PARSE if the primitive/accessor layout is invalid
+//   - *out_count is not modified
+gltf_result gltf_mesh_primitive_index_count(const gltf_doc* doc,
+                                            uint32_t mesh_index,
+                                            uint32_t prim_i,
+                                            uint32_t* out_count,
+                                            gltf_error* out_err);
+
+// Reads one index element and returns it as uint32.
+//
+// Indexed primitive:
+//   - decodes the underlying index component type (U8/U16/U32) into *out_index
+//
+// Non-indexed primitive:
+//   - returns GLTF_OK
+//   - *out_index == index_i (identity mapping)
+//
+// On success:
+//   - returns GLTF_OK
+//   - writes index to *out_index
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID if arguments are invalid or index_i is out of range
+//   - returns GLTF_ERR_PARSE if the primitive/accessor layout is invalid
+//   - *out_index is not modified
+gltf_result gltf_mesh_primitive_read_index_u32(const gltf_doc* doc,
+                                               uint32_t mesh_index,
+                                               uint32_t prim_i,
+                                               uint32_t index_i,
+                                               uint32_t* out_index,
+                                               gltf_error* out_err);
+
+// Returns a span over the primitive indices accessor.
+//
+// Indexed primitive:
+//   - out_span describes the raw index data (SCALAR, componentType U8/U16/U32)
+//
+// Non-indexed primitive:
+//   - returns GLTF_OK
+//   - out_span->ptr == NULL
+//   - out_span->count == 0
+//   - out_span->stride == 0
+//   - out_span->elem_size == 0
+//
+// On success:
+//   - returns GLTF_OK
+//   - fills out_span
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID if arguments are invalid
+//   - returns GLTF_ERR_PARSE if the primitive/accessor layout is invalid
+//   - out_span is not modified
+gltf_result gltf_mesh_primitive_indices_span(const gltf_doc* doc,
+                                             uint32_t mesh_index,
+                                             uint32_t prim_i,
+                                             gltf_span* out_span,
+                                             gltf_error* out_err);
+
+// Aggregated view of a renderable primitive.
+//
+// This is a convenience structure that groups spans and derived metadata
+// needed for drawing.
+//
+// If the primitive is indexed:
+//   - indices.ptr != NULL
+//   - index_component_type is GLTF_COMP_U8 / GLTF_COMP_U16 / GLTF_COMP_U32
+//   - index_count equals indices.count
+//
+// If the primitive is non-indexed:
+//   - indices is {NULL, 0, 0, 0}
+//   - index_component_type == 0
+//   - index_count equals positions.count
+typedef struct gltf_draw_primitive_view {
+  gltf_span positions;            // VEC3 position data
+  gltf_span indices;              // SCALAR indices (may be empty for non-indexed)
+  uint32_t  index_count;          // indices.count or positions.count if non-indexed
+  uint32_t  index_component_type; // GLTF_COMP_U8/U16/U32, or 0 if non-indexed
+} gltf_draw_primitive_view;
+
+// Builds a draw-ready primitive view (positions + indices metadata).
+//
+// On success:
+//   - returns GLTF_OK
+//   - fills out_view
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID if arguments are invalid
+//   - returns GLTF_ERR_PARSE if the primitive/accessor layout is invalid
+//   - out_view is not modified
+gltf_result gltf_mesh_primitive_view(const gltf_doc* doc,
+                                     uint32_t mesh_index,
+                                     uint32_t prim_i,
+                                     gltf_draw_primitive_view* out_view,
+                                     gltf_error* out_err);
+
+
+// ----------------------------------------------------------------------------
+// Accessors
+// ----------------------------------------------------------------------------
 
 // Returns the number of accessors in the document.
 // Returns 0 if doc is NULL.
@@ -236,6 +447,35 @@ gltf_result gltf_accessor_read_f32(const gltf_doc* doc,
                                    float* out,
                                    uint32_t out_cap,
                                    gltf_error* out_err);
+
+
+// ----------------------------------------------------------------------------
+// Utilities
+// ----------------------------------------------------------------------------
+
+// Computes an axis-aligned bounding box (AABB) for a VEC3 POSITION accessor.
+//
+// This utility reads POSITION data directly via gltf_accessor_span().
+//
+// Requirements:
+//   - accessor must be VEC3
+//   - componentType must be F32
+//   - accessor must be non-normalized
+//
+// On success:
+//   - returns GLTF_OK
+//   - writes min xyz to out_min3[3]
+//   - writes max xyz to out_max3[3]
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID if arguments are invalid
+//   - returns GLTF_ERR_PARSE if accessor type/layout is not supported
+//   - outputs are not modified
+gltf_result gltf_compute_aabb_pos3_f32_span(const gltf_doc* doc,
+                                           uint32_t accessor_index,
+                                           float out_min3[3],
+                                           float out_max3[3],
+                                           gltf_error* out_err);
 
 #ifdef __cplusplus
 }

@@ -30,17 +30,37 @@ static void assert_vec3_eq(const float* v, float x, float y, float z) {
 void test_02_load_positions_and_indices(void) {
   const char* path = sample_path();
 
-  gltf_error err = {0};
+  gltf_error err = { 0 };
 
   int rc = gltf_load_file(path, &g_doc, &err);
 
   TEST_ASSERT_EQUAL_UINT32_MESSAGE(GLTF_OK, rc, err.message ? err.message : "load_file failed");
   TEST_ASSERT_NOT_NULL(g_doc);
 
-  // accessors[0] = POSITION (VEC3, F32, count=4, min/max)
-  // accessors[1] = indices  (SCALAR, U16, count=6)
-  const uint32_t pos_acc = 0;
-  const uint32_t idx_acc = 1;
+  TEST_ASSERT_TRUE(gltf_doc_mesh_count(g_doc) > 0);
+
+  const uint32_t mesh_index = 0;
+  const uint32_t prim_i = 0;
+
+  TEST_ASSERT_TRUE(gltf_doc_mesh_primitive_count(g_doc, mesh_index) > 0);
+
+  // Test the mesh->primitive mapping
+  uint32_t prim_index = 0;
+  TEST_ASSERT_EQUAL_INT(
+    1,
+    gltf_doc_mesh_primitive(g_doc, mesh_index, prim_i, &prim_index)
+  );
+  TEST_ASSERT_EQUAL_INT(0, prim_index);
+
+  // Resolve primitive
+  uint32_t pos_acc = 0;
+  int32_t  idx_acc = -1;
+
+  TEST_ASSERT_EQUAL_INT(
+    1,
+    gltf_mesh_primitive_get_accessors(g_doc, mesh_index, prim_i, &pos_acc, &idx_acc)
+  );
+  TEST_ASSERT_TRUE(idx_acc >= 0);
 
   // Check accessor info: POSITION
   uint32_t count = 0, comp = 0, type = 0;
@@ -53,7 +73,7 @@ void test_02_load_positions_and_indices(void) {
   TEST_ASSERT_EQUAL_INT(0, norm);
 
   // Check span: POSITION
-  gltf_span sp = {0};
+  gltf_span sp = { 0 };
   rc = gltf_accessor_span(g_doc, pos_acc, &sp, &err);
   TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, rc, err.message ? err.message : "span failed");
 
@@ -62,19 +82,11 @@ void test_02_load_positions_and_indices(void) {
   TEST_ASSERT_EQUAL_UINT32(12, sp.stride);    // packed: 48 bytes / 4 verts
 
   // Read verts and calc AABB
-  float mn[3] = { INFINITY, INFINITY, INFINITY };
-  float mx[3] = { -INFINITY, -INFINITY, -INFINITY };
-  float v[16] = {0};
+  float mn[3] = {0};
+  float mx[3] = {0};
 
-  for (uint32_t i = 0; i < sp.count; i++) {
-    rc = gltf_accessor_read_f32(g_doc, pos_acc, i, v, 16, &err);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, rc, err.message ? err.message : "read_f32 failed");
-
-    for (int k = 0; k < 3; k++) {
-      if (v[k] < mn[k]) mn[k] = v[k];
-      if (v[k] > mx[k]) mx[k] = v[k];
-    }
-  }
+  rc = gltf_compute_aabb_pos3_f32_span(g_doc, pos_acc, mn, mx, &err);
+  TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, rc, err.message ? err.message : "compute_aabb failed");
 
   // accessor.min/max:
   assert_vec3_eq(mn, -1.f, 0.f, -1.f);
@@ -119,26 +131,38 @@ void test_02_embedded_load_positions(void) {
   TEST_ASSERT_EQUAL_UINT32_MESSAGE(GLTF_OK, rc, err.message ? err.message : "load_file failed");
   TEST_ASSERT_NOT_NULL(g_doc);
 
-  const uint32_t pos_acc = 0;
+  TEST_ASSERT_TRUE(gltf_doc_mesh_count(g_doc) > 0);
 
+  const uint32_t mesh_index = 0;
+  const uint32_t prim_i = 0;
+
+  // Resolve primitive
+  uint32_t pos_acc = 0;
+  int32_t  idx_acc = -1;
+
+  TEST_ASSERT_EQUAL_INT(
+    1,
+    gltf_mesh_primitive_get_accessors(g_doc, mesh_index, prim_i, &pos_acc, &idx_acc)
+  );
+  TEST_ASSERT_TRUE(idx_acc >= 0);
+
+  // Check span: POSITION
   gltf_span sp = {0};
   rc = gltf_accessor_span(g_doc, pos_acc, &sp, &err);
   TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, rc, err.message ? err.message : "span failed");
 
-  float mn[3] = { INFINITY, INFINITY, INFINITY };
-  float mx[3] = { -INFINITY, -INFINITY, -INFINITY };
-  float v[16] = {0};
+  TEST_ASSERT_EQUAL_UINT32(4, sp.count);
+  TEST_ASSERT_EQUAL_UINT32(12, sp.elem_size); // VEC3 f32
+  TEST_ASSERT_EQUAL_UINT32(12, sp.stride);    // packed: 48 bytes / 4 verts
+  
+  // Read verts and calc AABB
+  float mn[3] = {0};
+  float mx[3] = {0};
 
-  for (uint32_t i = 0; i < sp.count; i++) {
-    rc = gltf_accessor_read_f32(g_doc, pos_acc, i, v, 16, &err);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, rc, err.message ? err.message : "read_f32 failed");
+  rc = gltf_compute_aabb_pos3_f32_span(g_doc, pos_acc, mn, mx, &err);
+  TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, rc, err.message ? err.message : "compute_aabb failed");
 
-    for (int k = 0; k < 3; k++) {
-      if (v[k] < mn[k]) mn[k] = v[k];
-      if (v[k] > mx[k]) mx[k] = v[k];
-    }
-  }
-
+  // accessor.min/max:
   assert_vec3_eq(mn, -1.f, 0.f, -1.f);
   assert_vec3_eq(mx,  1.f, 0.f,  1.f);
 }
