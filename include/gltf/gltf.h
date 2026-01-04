@@ -62,6 +62,32 @@ typedef enum gltf_accessor_type {
   GLTF_ACCESSOR_MAT4,       // 16 components (column-major)
 } gltf_accessor_type;
 
+// glTF primitive modes (drawing modes).
+typedef enum gltf_prim_mode {
+  GLTF_PRIM_POINTS         = 0,
+  GLTF_PRIM_LINES          = 1,
+  GLTF_PRIM_LINE_LOOP      = 2,
+  GLTF_PRIM_LINE_STRIP     = 3,
+  GLTF_PRIM_TRIANGLES      = 4,
+  GLTF_PRIM_TRIANGLE_STRIP = 5,
+  GLTF_PRIM_TRIANGLE_FAN   = 6,
+} gltf_prim_mode;
+
+// Attribute semantics for primitive attributes.
+typedef enum gltf_attr_semantic {
+  GLTF_ATTR_UNKNOWN = 0,
+
+  GLTF_ATTR_POSITION,
+  GLTF_ATTR_NORMAL,
+  GLTF_ATTR_TANGENT,
+
+  GLTF_ATTR_TEXCOORD,   // TEXCOORD_n
+  GLTF_ATTR_COLOR,      // COLOR_n
+
+  GLTF_ATTR_JOINTS,     // JOINTS_n
+  GLTF_ATTR_WEIGHTS,    // WEIGHTS_n
+} gltf_attr_semantic;
+
 
 // Loads a glTF 2.0 JSON (.gltf) file.
 //
@@ -164,7 +190,7 @@ const char* gltf_doc_mesh_name(const gltf_doc* doc, uint32_t mesh_index);
 
 
 // ----------------------------------------------------------------------------
-// Mesh primitives (POSITION/indices)
+// Mesh primitives
 // ----------------------------------------------------------------------------
 //
 // Notes:
@@ -360,6 +386,72 @@ gltf_result gltf_mesh_primitive_view(const gltf_doc* doc,
                                      gltf_draw_primitive_view* out_view,
                                      gltf_error* out_err);
 
+// Returns primitive mode (topology).
+//
+// Notes:
+//   - If 'mode' was omitted in JSON, the loader defaults it to GLTF_PRIM_TRIANGLES.
+//   - Returns GLTF_PRIM_TRIANGLES if doc is NULL or primitive_index is out of range.
+gltf_prim_mode gltf_doc_primitive_mode(const gltf_doc* doc,
+                                       uint32_t primitive_index);
+
+// Returns non-zero if the primitive has indices and writes the indices accessor index.
+//
+// On success (indices present):
+//   - returns 1
+//   - writes the accessor index to *out_indices_accessor
+//
+// If indices are absent:
+//   - returns 0
+//   - writes -1 to *out_indices_accessor
+//
+// On failure (doc NULL, out_indices_accessor NULL, out of range):
+//   - returns 0
+//   - *out_indices_accessor is not modified
+int gltf_doc_primitive_indices_accessor(const gltf_doc* doc,
+                                        uint32_t primitive_index,
+                                        int32_t* out_indices_accessor);
+
+// Returns the number of attributes stored on the primitive.
+// Returns 0 if doc is NULL or primitive_index is out of range.
+uint32_t gltf_doc_primitive_attribute_count(const gltf_doc* doc,
+                                            uint32_t primitive_index);
+
+// Returns the attribute at attr_i for a given primitive.
+//
+// On success:
+//   - returns 1
+//   - writes semantic, set index, and accessor index to output parameters
+//
+// On failure (doc NULL, outputs NULL, out of range):
+//   - returns 0
+//   - output parameters are not modified
+int gltf_doc_primitive_attribute(const gltf_doc* doc,
+                                 uint32_t primitive_index,
+                                 uint32_t attr_i,
+                                 gltf_attr_semantic* out_semantic,
+                                 uint32_t* out_set_index,
+                                 uint32_t* out_accessor_index);
+
+// Finds an attribute by semantic + set index.
+//
+// Examples:
+//   - POSITION:  semantic=GLTF_ATTR_POSITION, set_index=0
+//   - TEXCOORD_0: semantic=GLTF_ATTR_TEXCOORD, set_index=0
+//   - TEXCOORD_1: semantic=GLTF_ATTR_TEXCOORD, set_index=1
+//
+// On success:
+//   - returns 1
+//   - writes accessor index to *out_accessor_index
+//
+// If not found:
+//   - returns 0
+//   - *out_accessor_index is not modified
+int gltf_doc_primitive_find_attribute(const gltf_doc* doc,
+                                      uint32_t primitive_index,
+                                      gltf_attr_semantic semantic,
+                                      uint32_t set_index,
+                                      uint32_t* out_accessor_index);
+
 
 // ----------------------------------------------------------------------------
 // Accessors
@@ -476,6 +568,68 @@ gltf_result gltf_compute_aabb_pos3_f32_span(const gltf_doc* doc,
                                            float out_min3[3],
                                            float out_max3[3],
                                            gltf_error* out_err);
+
+
+// ----------------------------------------------------------------------------
+// Triangle iteration (primitive topology)
+// ----------------------------------------------------------------------------
+
+// One triangle expressed as 3 vertex indices.
+// Indices refer to vertex elements of the primitive's attribute accessors
+// (POSITION/NORMAL/TEXCOORD_0/...), i.e. the same index space as POSITION.count.
+typedef struct gltf_tri {
+  uint32_t i0;
+  uint32_t i1;
+  uint32_t i2;
+} gltf_tri;
+
+typedef enum gltf_iter_result {
+  GLTF_ITER_CONTINUE = 0,
+  GLTF_ITER_STOP     = 1
+} gltf_iter_result;
+
+// Called for each generated triangle.
+//
+// Parameters:
+//   - tri: vertex indices of the triangle
+//   - tri_index: 0..(triangle_count-1) within this primitive
+//   - user: user context pointer passed to the iterator
+//
+// Return:
+//   - GLTF_ITER_CONTINUE to keep iterating
+//   - GLTF_ITER_STOP to stop early (iterator returns GLTF_OK)
+typedef gltf_iter_result (*gltf_tri_cb)(const gltf_tri* tri,
+                                       uint32_t tri_index,
+                                       void* user);
+
+// Iterates triangles produced by a primitive.
+//
+// Supported primitive modes:
+//   - GLTF_PRIM_TRIANGLES
+//   - GLTF_PRIM_TRIANGLE_STRIP
+//   - GLTF_PRIM_TRIANGLE_FAN
+//
+// Indices:
+//   - Indexed primitive: indices are decoded to uint32 (U8/U16/U32).
+//   - Non-indexed primitive: identity indices [0..vertex_count).
+//
+// Notes:
+//   - Degenerate triangles are not filtered (e.g. strip with repeated indices).
+//   - Triangle winding for TRIANGLE_STRIP alternates to preserve orientation.
+//
+// On success:
+//   - returns GLTF_OK
+//   - invokes cb for each triangle until completion or early stop
+//
+// On failure:
+//   - returns GLTF_ERR_INVALID for invalid arguments, out-of-range primitive, unsupported mode
+//   - returns GLTF_ERR_PARSE for invalid index accessor layout/componentType
+gltf_result gltf_doc_primitive_iterate_triangles(const gltf_doc* doc,
+                                                uint32_t primitive_index,
+                                                gltf_tri_cb cb,
+                                                void* user,
+                                                gltf_error* out_err);
+
 
 #ifdef __cplusplus
 }

@@ -259,7 +259,11 @@ gltf_result gltf_load_file(const char* path,
         GLTF_FAIL(GLTF_ERR_PARSE, "must be array", "root.meshes[].primitives", 1, 1);
       }
 
-      primitive_count = (unsigned)yyjson_arr_size(primitives_val);
+      size_t _primitive_count = yyjson_arr_size(primitives_val);
+      if (_primitive_count > UINT32_MAX) {
+        GLTF_FAIL(GLTF_ERR_PARSE, "too many primitives", "root.meshes[].primitives", 1, 1);
+      }
+      primitive_count = (uint32_t)_primitive_count;
 
       if (primitive_count > 0) {
         size_t new_count = (size_t)doc->primitive_count + (size_t)primitive_count;
@@ -291,19 +295,61 @@ gltf_result gltf_load_file(const char* path,
             GLTF_FAIL(GLTF_ERR_PARSE, "must be object", "root.meshes[].primitives[].attributes", 1, 1);
           }
 
-          uint32_t primitive_idx = primitive_first + prim_idx;
 
-          // POSITION is optional at load time; later queries may reject
-          // primitives without it.
-          GLTF_TRY(
-            gltf_json_get_u32(
-              attributes_val,
-              "POSITION",
-              0xFFFFFFFFu,
-              &doc->primitives[primitive_idx].position_accessor,
-              "root.meshes[].primitives[].attributes.POSITION",
-              out_err)
-          );
+          uint32_t attr_first = doc->prim_attr_count;
+          uint32_t attr_count = 0;
+
+          // pass 1: count known attrs
+          uint32_t known = 0;
+
+          size_t attributes_idx, attributes_max;
+          yyjson_val *key, *val;
+          yyjson_obj_foreach(attributes_val, attributes_idx, attributes_max, key, val) {
+            uint32_t set = 0;
+            gltf_attr_semantic sem = gltf_parse_semantic(yyjson_get_str(key), &set);
+            if (sem == GLTF_ATTR_UNKNOWN) continue;
+            known++;
+          }
+
+          if (known > 0) {
+            // reserve once
+            size_t new_count = (size_t)doc->prim_attr_count + (size_t)known;
+            if (new_count > SIZE_MAX / sizeof(gltf_prim_attr)) {
+              GLTF_FAIL(GLTF_ERR_IO, "too many primitive attributes", "root.meshes[].primitives", 1, 1);
+            }
+            size_t prim_attr_size = new_count * sizeof(gltf_prim_attr);
+            gltf_prim_attr* prim_attrs = (gltf_prim_attr*)realloc(doc->prim_attrs, prim_attr_size);
+            if (!prim_attrs) {
+              GLTF_FAIL(GLTF_ERR_IO, "out of memory", "root.meshes[].primitives", 1, 1);
+            }
+            doc->prim_attrs = prim_attrs;
+
+            yyjson_obj_foreach(attributes_val, attributes_idx, attributes_max, key, val) {
+              uint32_t out_set_index;
+              gltf_attr_semantic semantic = gltf_parse_semantic(
+                yyjson_get_str(key),
+                &out_set_index
+              );
+
+              if (semantic == GLTF_ATTR_UNKNOWN) {
+                // Ignore unknown semantics.
+                continue;
+              }
+              if (!yyjson_is_uint(val)) {
+                GLTF_FAIL(GLTF_ERR_PARSE, "must be unsigned integer", "root.meshes[].primitives[].attributes[]", 1, 1);
+              }
+
+              gltf_prim_attr attr;
+              attr.semantic = semantic;
+              attr.set_index = out_set_index;
+              attr.accessor_index = (uint32_t)yyjson_get_uint(val);            
+              doc->prim_attrs[doc->prim_attr_count++] = attr;
+
+              attr_count++;
+            }
+          }
+
+          uint32_t primitive_idx = primitive_first + prim_idx;
 
           GLTF_TRY(
             gltf_json_get_i32(
@@ -314,6 +360,25 @@ gltf_result gltf_load_file(const char* path,
               "root.meshes[].primitives[].indices",
               out_err)
           );
+          
+          int32_t mode_;
+          GLTF_TRY(
+            gltf_json_get_i32(
+              prim_val,
+              "mode",
+              GLTF_PRIM_TRIANGLES,
+              &mode_,
+              "root.meshes[].primitives[].mode",
+              out_err)
+          );
+          if (mode_ < 0 || mode_ > 6) {
+            GLTF_FAIL(GLTF_ERR_PARSE, "invalid primitive mode", "root.meshes[].primitives[].mode", 1, 1);
+          }
+          doc->primitives[primitive_idx].mode = (gltf_prim_mode)mode_;
+
+
+          doc->primitives[primitive_idx].attributes_first = attr_first;
+          doc->primitives[primitive_idx].attributes_count = attr_count;
         }
       }
 

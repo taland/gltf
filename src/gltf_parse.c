@@ -269,6 +269,65 @@ gltf_result gltf_json_get_u32_index_array_range_opt(gltf_doc* doc,
   return GLTF_OK;
 }
 
+static int gltf_parse_uint_suffix(const char* p, uint32_t* out_n) {
+  if (!p || !out_n) return 0;
+  if (*p == '\0') return 0;
+
+  char* end = NULL;
+  unsigned long n = strtoul(p, &end, 10);
+
+  // must consume at least one digit and then end string
+  if (end == p || *end != '\0') return 0;
+  if (n > UINT32_MAX) return 0;
+
+  *out_n = (uint32_t)n;
+  return 1;
+}
+
+gltf_attr_semantic gltf_parse_semantic(const char* key, uint32_t* out_set_index) {
+  if (!out_set_index) return GLTF_ATTR_UNKNOWN;
+  uint32_t n = 0;
+  *out_set_index = n;
+
+  if (!key) return GLTF_ATTR_UNKNOWN;
+
+  // fixed, non-indexed semantics
+  if (strcmp(key, "POSITION") == 0) return GLTF_ATTR_POSITION;
+  if (strcmp(key, "NORMAL")   == 0) return GLTF_ATTR_NORMAL;
+  if (strcmp(key, "TANGENT")  == 0) return GLTF_ATTR_TANGENT;
+
+  // TEXCOORD_n
+  if (strncmp(key, "TEXCOORD_", 9) == 0) {
+    if (!gltf_parse_uint_suffix(key + 9, &n)) return GLTF_ATTR_UNKNOWN;
+    *out_set_index = n;
+    return GLTF_ATTR_TEXCOORD;
+  }
+
+  // COLOR_n
+  if (strncmp(key, "COLOR_", 6) == 0) {
+    if (!gltf_parse_uint_suffix(key + 6, &n)) return GLTF_ATTR_UNKNOWN;
+    *out_set_index = n;
+    return GLTF_ATTR_COLOR;
+  }
+
+  // JOINTS_n
+  if (strncmp(key, "JOINTS_", 7) == 0) {
+    if (!gltf_parse_uint_suffix(key + 7, &n)) return GLTF_ATTR_UNKNOWN;
+    *out_set_index = n;
+    return GLTF_ATTR_JOINTS;
+  }
+
+  // WEIGHTS_n
+  if (strncmp(key, "WEIGHTS_", 8) == 0) {
+    if (!gltf_parse_uint_suffix(key + 8, &n)) return GLTF_ATTR_UNKNOWN;
+    *out_set_index = n;
+    return GLTF_ATTR_WEIGHTS;
+  }
+
+  return GLTF_ATTR_UNKNOWN;
+}
+
+
 // ----------------------------------------------------------------------------
 // Data URIs (base64)
 // ----------------------------------------------------------------------------

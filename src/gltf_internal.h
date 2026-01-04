@@ -55,9 +55,18 @@ typedef struct gltf_node {
 
 // Parsed glTF primitive.
 typedef struct gltf_primitive {
-  uint32_t position_accessor; // accessor index for POSITION attribute (required)
+  uint32_t attributes_first;
+  uint32_t attributes_count;
   int32_t indices_accessor;   // accessor index for indices, or -1 if non-indexed
+  gltf_prim_mode mode;        // default TRIANGLES (4)
 } gltf_primitive;
+
+// Parsed glTF primitive attribute (semantic + set index + accessor).
+typedef struct gltf_prim_attr {
+  gltf_attr_semantic semantic;   // POSITION/NORMAL/...
+  uint32_t set_index;            // for TEXCOORD_n/COLOR_n (0/1/2...), else 0
+  uint32_t accessor_index;       // index into doc->accessors[]
+} gltf_prim_attr;
 
 // Parsed glTF mesh (name + range into doc->primitives).
 typedef struct gltf_mesh {
@@ -116,6 +125,7 @@ struct gltf_doc {
   uint32_t node_count;
   uint32_t mesh_count;
   uint32_t primitive_count;
+  uint32_t prim_attr_count;
   uint32_t buffer_count;
   uint32_t buffer_view_count;
   uint32_t accessor_count;
@@ -128,6 +138,7 @@ struct gltf_doc {
   gltf_node* nodes;               // [node_count]
   gltf_mesh* meshes;              // [mesh_count]
   gltf_primitive* primitives;     // [primitive_count]
+  gltf_prim_attr* prim_attrs;     // [prim_attr_count]
   gltf_buffer* buffers;           // [buffer_count]
   gltf_buffer_view* buffer_views; // [buffer_view_count]
   gltf_accessor* accessors;       // [accessor_count]
@@ -244,6 +255,9 @@ gltf_result gltf_json_get_str_opt_dup_arena(yyjson_val* obj,
                                             gltf_str* out,
                                             const char* err_path,
                                             gltf_error* out_err);
+
+gltf_attr_semantic gltf_parse_semantic(const char* key, uint32_t* out_set_index);
+
 
 // ----------------------------------------------------------------------------
 // Required scalars (src/gltf_parse.c)

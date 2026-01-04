@@ -83,6 +83,7 @@ if(GLTF_BUILD_TESTS)
     tests/test_main.c
     tests/test_01_minimal.c
     tests/test_02_positions_and_indices.c
+    tests/test_03_primitives.c
     third_party/unity/unity.c
   )
 
