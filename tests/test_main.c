@@ -10,6 +10,10 @@ void test_02_load_positions_and_indices(void);
 void test_02_embedded_load_positions(void);
 void test_03_primitives(void);
 void test_03_iterate_triangles(void);
+void test_03_iterate_triangles_triangle_strip_indexed(void);
+void test_03_iterate_triangles_triangle_strip_non_indexed(void);
+void test_03_iterate_triangles_triangle_fan_indexed(void);
+void test_03_iterate_triangles_triangle_fan_non_indexed(void);
 
 void setUp(void) {
     g_doc = NULL;
@@ -29,6 +33,10 @@ int main(void) {
   RUN_TEST(test_02_embedded_load_positions);
   RUN_TEST(test_03_primitives);
   RUN_TEST(test_03_iterate_triangles);
+  RUN_TEST(test_03_iterate_triangles_triangle_strip_indexed);
+  RUN_TEST(test_03_iterate_triangles_triangle_strip_non_indexed);
+  RUN_TEST(test_03_iterate_triangles_triangle_fan_indexed);
+  RUN_TEST(test_03_iterate_triangles_triangle_fan_non_indexed);
 
   return UNITY_END();
 }

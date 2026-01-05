@@ -473,11 +473,42 @@ int gltf_doc_primitive_find_attribute(const gltf_doc* doc,
   return 0;
 }
 
-gltf_result gltf_doc_primitive_iterate_triangles(const gltf_doc* doc,
-                                                uint32_t primitive_index,
-                                                gltf_tri_cb cb,
-                                                void* user,
+
+static inline gltf_result gltf_get_vertex_index(const gltf_doc* doc,
+                                                int has_idx,
+                                                uint32_t idx_accessor,
+                                                uint32_t idx_i,
+                                                uint32_t v_count,
+                                                uint32_t* out,
                                                 gltf_error* out_err) {
+  if (!doc || !out) {
+    gltf_set_err(out_err, "invalid arguments", "root", 1, 1);
+    return GLTF_ERR_INVALID;
+  }
+
+  if (has_idx) {
+    gltf_result r;
+    r = gltf_read_index_u32_from_accessor(doc, idx_accessor, idx_i, out, out_err);
+    if (r != GLTF_OK) {
+      return r;
+    }
+  } else {
+    *out = idx_i;
+  }
+
+  if (*out >= v_count) {
+    gltf_set_err(out_err, "index out of range", "root.accessors[]", 1, 1);
+    return GLTF_ERR_PARSE;
+  }
+
+  return GLTF_OK;
+}
+
+gltf_result gltf_doc_primitive_iterate_triangles(const gltf_doc* doc,
+                                                 uint32_t primitive_index,
+                                                 gltf_tri_cb cb,
+                                                 void* user,
+                                                 gltf_error* out_err) {
   if (!doc || !cb) {
     gltf_set_err(out_err, "invalid arguments", "root", 1, 1);
     return GLTF_ERR_INVALID;
@@ -549,57 +580,97 @@ gltf_result gltf_doc_primitive_iterate_triangles(const gltf_doc* doc,
       return GLTF_ERR_PARSE;
     }
   }
-  
-  if (doc->primitives[primitive_index].mode != GLTF_PRIM_TRIANGLES) {
-    gltf_set_err(out_err, "only TRIANGLES primitive mode is supported", "root.primitives[].mode", 1, 1);
-    return GLTF_ERR_INVALID;
-  }
 
-  uint32_t n = has_idx ? i_count : v_count;
-  if ((n % 3) != 0) {
-    gltf_set_err(out_err, "TRIANGLES require count divisible by 3", "root.primitives[]", 1, 1);
-    return GLTF_ERR_PARSE;
-  }
-
-  uint32_t tri_count = n / 3;
-  
-  for (uint32_t t = 0; t < tri_count; t++) {
-    gltf_tri tri;
-
-    if (has_idx) {
-      gltf_result r;
-
-      r = gltf_read_index_u32_from_accessor(doc, (uint32_t)idx_accessor, t * 3 + 0, &tri.i0, out_err);
-      if (r != GLTF_OK) {
-        return r;
-      }
-
-      r = gltf_read_index_u32_from_accessor(doc, (uint32_t)idx_accessor, t * 3 + 1, &tri.i1, out_err);
-      if (r != GLTF_OK) {
-        return r;
-      }
-
-      r = gltf_read_index_u32_from_accessor(doc, (uint32_t)idx_accessor, t * 3 + 2, &tri.i2, out_err);
-      if (r != GLTF_OK) {
-        return r;
-      }
-
-      if (tri.i0 >= v_count || tri.i1 >= v_count || tri.i2 >= v_count) {
-        gltf_set_err(out_err, "index out of range", "root.accessors[]", 1, 1);
+  switch (doc->primitives[primitive_index].mode) {
+    case GLTF_PRIM_TRIANGLES: {
+      uint32_t n = has_idx ? i_count : v_count;
+      
+      if ((n % 3) != 0) {
+        gltf_set_err(out_err, "TRIANGLES require count divisible by 3", "root.primitives[]", 1, 1);
         return GLTF_ERR_PARSE;
       }
-    } else {
-      tri.i0 = t * 3 + 0;
-      tri.i1 = t * 3 + 1;
-      tri.i2 = t * 3 + 2;
+
+      uint32_t tri_count = n / 3;
+
+      for (uint32_t t = 0; t < tri_count; t++) {
+        gltf_tri tri;
+        gltf_result r;
+
+        r = gltf_get_vertex_index(doc, has_idx, (uint32_t)idx_accessor, t * 3 + 0, v_count, &tri.i0, out_err);
+        if (r != GLTF_OK) return r;
+        r = gltf_get_vertex_index(doc, has_idx, (uint32_t)idx_accessor, t * 3 + 1, v_count, &tri.i1, out_err);
+        if (r != GLTF_OK) return r;
+        r = gltf_get_vertex_index(doc, has_idx, (uint32_t)idx_accessor, t * 3 + 2, v_count, &tri.i2, out_err);
+        if (r != GLTF_OK) return r;
+
+        gltf_iter_result cb_r = cb(&tri, t, user);
+        if (cb_r == GLTF_ITER_STOP) {
+          return GLTF_OK;
+        }
+      }
+      break;
     }
 
-    gltf_iter_result cb_r = cb(&tri, t, user);
-    if (cb_r == GLTF_ITER_STOP) {
-      return GLTF_OK;
+    case GLTF_PRIM_TRIANGLE_STRIP: {
+      uint32_t n = has_idx ? i_count : v_count;
+
+      if (n < 3) return GLTF_OK;
+
+      const uint32_t tri_count = n - 2;
+      for (uint32_t t = 0; t < tri_count; t++) {
+        gltf_tri tri;
+        gltf_result r;
+
+        r = gltf_get_vertex_index(doc, has_idx, (uint32_t)idx_accessor, t + 0, v_count, &tri.i0, out_err);
+        if (r != GLTF_OK) return r;
+        r = gltf_get_vertex_index(doc, has_idx, (uint32_t)idx_accessor, t + 1, v_count, &tri.i1, out_err);
+        if (r != GLTF_OK) return r;
+        r = gltf_get_vertex_index(doc, has_idx, (uint32_t)idx_accessor, t + 2, v_count, &tri.i2, out_err);
+        if (r != GLTF_OK) return r;
+        
+        if ((t & 1u) != 0u) {  // odd
+          uint32_t i_ = tri.i0;
+          tri.i0 = tri.i1;
+          tri.i1 = i_;
+        }
+
+        gltf_iter_result cb_r = cb(&tri, t, user);
+        if (cb_r == GLTF_ITER_STOP) {
+          return GLTF_OK;
+        }
+      }
+      break;
     }
+
+    case GLTF_PRIM_TRIANGLE_FAN: {
+      uint32_t tri_index = 0;
+      uint32_t n = has_idx ? i_count : v_count;
+
+      if (n < 3) return GLTF_OK;
+
+      for (uint32_t t = 2; t < n; t++, tri_index++) {
+        gltf_tri tri;
+        gltf_result r;
+
+        r = gltf_get_vertex_index(doc, has_idx, (uint32_t)idx_accessor, 0, v_count, &tri.i0, out_err);
+        if (r != GLTF_OK) return r;
+        r = gltf_get_vertex_index(doc, has_idx, (uint32_t)idx_accessor, t - 1, v_count, &tri.i1, out_err);
+        if (r != GLTF_OK) return r;
+        r = gltf_get_vertex_index(doc, has_idx, (uint32_t)idx_accessor, t, v_count, &tri.i2, out_err);
+        if (r != GLTF_OK) return r;
+
+        gltf_iter_result cb_r = cb(&tri, tri_index, user);
+        if (cb_r == GLTF_ITER_STOP) {
+          return GLTF_OK;
+        }
+      }
+      break;
+    }
+
+    default:
+      gltf_set_err(out_err, "unsupported primitive mode", "root.primitives[].mode", 1, 1);
+      return GLTF_ERR_INVALID;
   }
-
 
   return GLTF_OK;
 }

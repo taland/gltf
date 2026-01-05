@@ -4,9 +4,6 @@
 
 #include <stdio.h>
 #include <math.h>
-
-// #include <stdio.h>
-// #include <stdlib.h>
 #include <string.h>
 
 #ifndef GLTF_REPO_ROOT
@@ -19,44 +16,6 @@ static const char* sample_path(void) {
   return GLTF_REPO_ROOT "/tests/fixtures/03-tri.gltf";
 }
 
-typedef struct tri_stats {
-  uint32_t tri_calls;
-  uint32_t min_i;
-  uint32_t max_i;
-  uint32_t stop_after; // 0 = no early stop
-} tri_stats;
-
-static gltf_iter_result on_tri(const gltf_tri* tri, uint32_t tri_index, void* user) {
-  (void)tri_index;
-  tri_stats* s = (tri_stats*)user;
-
-  s->tri_calls++;
-
-  if (tri->i0 < s->min_i) s->min_i = tri->i0;
-  if (tri->i1 < s->min_i) s->min_i = tri->i1;
-  if (tri->i2 < s->min_i) s->min_i = tri->i2;
-
-  if (tri->i0 > s->max_i) s->max_i = tri->i0;
-  if (tri->i1 > s->max_i) s->max_i = tri->i1;
-  if (tri->i2 > s->max_i) s->max_i = tri->i2;
-
-  if (s->stop_after != 0 && s->tri_calls >= s->stop_after) {
-    return GLTF_ITER_STOP;
-  }
-  return GLTF_ITER_CONTINUE;
-}
-
-static uint32_t expected_tri_count(gltf_prim_mode mode, uint32_t n) {
-  switch (mode) {
-    case GLTF_PRIM_TRIANGLES:
-      return (n / 3);
-    case GLTF_PRIM_TRIANGLE_STRIP:
-    case GLTF_PRIM_TRIANGLE_FAN:
-      return (n >= 3) ? (n - 2) : 0;
-    default:
-      return 0;
-  }
-}
 
 void test_03_primitives(void) {
   const char* path = sample_path();
@@ -148,6 +107,47 @@ void test_03_primitives(void) {
     }
   }
 }
+
+
+typedef struct tri_stats {
+  uint32_t tri_calls;
+  uint32_t min_i;
+  uint32_t max_i;
+  uint32_t stop_after; // 0 = no early stop
+} tri_stats;
+
+static gltf_iter_result on_tri(const gltf_tri* tri, uint32_t tri_index, void* user) {
+  (void)tri_index;
+  tri_stats* s = (tri_stats*)user;
+
+  s->tri_calls++;
+
+  if (tri->i0 < s->min_i) s->min_i = tri->i0;
+  if (tri->i1 < s->min_i) s->min_i = tri->i1;
+  if (tri->i2 < s->min_i) s->min_i = tri->i2;
+
+  if (tri->i0 > s->max_i) s->max_i = tri->i0;
+  if (tri->i1 > s->max_i) s->max_i = tri->i1;
+  if (tri->i2 > s->max_i) s->max_i = tri->i2;
+
+  if (s->stop_after != 0 && s->tri_calls >= s->stop_after) {
+    return GLTF_ITER_STOP;
+  }
+  return GLTF_ITER_CONTINUE;
+}
+
+static uint32_t expected_tri_count(gltf_prim_mode mode, uint32_t n) {
+  switch (mode) {
+    case GLTF_PRIM_TRIANGLES:
+      return (n / 3);
+    case GLTF_PRIM_TRIANGLE_STRIP:
+    case GLTF_PRIM_TRIANGLE_FAN:
+      return (n >= 3) ? (n - 2) : 0;
+    default:
+      return 0;
+  }
+}
+
 
 void test_03_iterate_triangles(void) {
   const char* path = sample_path();
@@ -271,4 +271,162 @@ void test_03_iterate_triangles(void) {
     TEST_ASSERT_TRUE_MESSAGE(it2 == GLTF_OK, "early-stop iterate must return GLTF_OK");
     TEST_ASSERT_TRUE_MESSAGE(s2.tri_calls == 1, "early-stop must stop after 1 triangle");
   }
+}
+
+
+typedef struct tri_expect {
+  uint32_t calls;
+  gltf_tri expected[8];
+  uint32_t exp_count;
+  uint32_t last_tri_index;
+} tri_expect;
+
+static gltf_iter_result on_tri_expect(const gltf_tri* tri, uint32_t tri_index, void* user) {
+  tri_expect* e = (tri_expect*)user;
+
+  TEST_ASSERT_TRUE_MESSAGE(e->calls < e->exp_count, "triangle callback called too many times");
+  const gltf_tri* ex = &e->expected[e->calls];
+
+  TEST_ASSERT_EQUAL_UINT32_MESSAGE(ex->i0, tri->i0, "tri.i0 mismatch");
+  TEST_ASSERT_EQUAL_UINT32_MESSAGE(ex->i1, tri->i1, "tri.i1 mismatch");
+  TEST_ASSERT_EQUAL_UINT32_MESSAGE(ex->i2, tri->i2, "tri.i2 mismatch");
+
+  TEST_ASSERT_EQUAL_UINT32_MESSAGE(e->calls, tri_index, "tri_index must be sequential 0..");
+  e->last_tri_index = tri_index;
+
+  e->calls++;
+  return GLTF_ITER_CONTINUE;
+}
+
+static const char* tri_strip_path(void) {
+  return GLTF_REPO_ROOT "/tests/fixtures/03-tri_strip.gltf";
+}
+
+static const char* tri_strip_noidx_path(void) {
+  return GLTF_REPO_ROOT "/tests/fixtures/03-tri_strip_noidx.gltf";
+}
+
+
+void test_03_iterate_triangles_triangle_strip_indexed(void) {
+  const char* path = tri_strip_path();
+
+  gltf_doc* doc = NULL;
+  gltf_error err = {0};
+
+  gltf_result r = gltf_load_file(path, &doc, &err);
+  TEST_ASSERT_TRUE_MESSAGE(r == GLTF_OK && doc != NULL, "gltf_load_file failed");
+
+  uint32_t mi = 0;
+  uint32_t pi = 0;
+  uint32_t prim_index = 0;
+
+  tri_expect e;
+  memset(&e, 0, sizeof(e));
+  e.exp_count = 2;
+
+  // STRIP with 4 vertices => 2 triangles:
+  // t=0 even: (0,1,2)
+  // t=1 odd:  (1,0,3)  (winding flip)
+  e.expected[0] = (gltf_tri){0, 1, 2};
+  e.expected[1] = (gltf_tri){1, 0, 3}; // odd flip
+
+  gltf_result it_r = gltf_doc_primitive_iterate_triangles(doc, prim_index, on_tri, &e, &err);
+  TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, r, "iterate_triangles failed");
+  TEST_ASSERT_EQUAL_UINT32_MESSAGE(e.exp_count, e.calls, "strip triangle count mismatch");
+}
+
+void test_03_iterate_triangles_triangle_strip_non_indexed(void) {
+  const char* path = tri_strip_noidx_path();
+
+  gltf_doc* doc = NULL;
+  gltf_error err = (gltf_error){0};
+
+  gltf_result r = gltf_load_file(path, &doc, &err);
+  TEST_ASSERT_TRUE_MESSAGE(r == GLTF_OK && doc != NULL, "gltf_load_file failed");
+
+  uint32_t mi = 0;
+  uint32_t pi = 0;
+  uint32_t prim_index = 0;
+
+  tri_expect e;
+  memset(&e, 0, sizeof(e));
+  e.exp_count = 2;
+
+  // STRIP with 4 vertices => 2 triangles:
+  // t=0 even: (0,1,2)
+  // t=1 odd:  (1,0,3)  (winding flip)
+  e.expected[0] = (gltf_tri){0, 1, 2};
+  e.expected[1] = (gltf_tri){1, 0, 3};
+
+  gltf_result it_r = gltf_doc_primitive_iterate_triangles(doc, prim_index, on_tri, &e, &err);
+  TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, it_r, "iterate_triangles failed");
+  TEST_ASSERT_EQUAL_UINT32_MESSAGE(e.exp_count, e.calls, "strip triangle count mismatch");
+
+  gltf_free(doc);
+}
+
+
+static const char* tri_fan_path(void) {
+  return GLTF_REPO_ROOT "/tests/fixtures/03-tri_fan.gltf";
+}
+
+static const char* tri_fan_noidx_path(void) {
+  return GLTF_REPO_ROOT "/tests/fixtures/03-tri_fan_noidx.gltf";
+}
+
+
+void test_03_iterate_triangles_triangle_fan_indexed(void) {
+  const char* path = tri_fan_path();
+
+  gltf_doc* doc = NULL;
+  gltf_error err = {0};
+
+  gltf_result r = gltf_load_file(path, &doc, &err);
+  TEST_ASSERT_TRUE_MESSAGE(r == GLTF_OK && doc != NULL, "gltf_load_file failed");
+
+  uint32_t mi = 0;
+  uint32_t pi = 0;
+  uint32_t prim_index = 0;
+
+  tri_expect e;
+  memset(&e, 0, sizeof(e));
+  e.exp_count = 2;
+
+  // FAN with 4 vertices => 2 triangles:
+  // (0,1,2), (0,2,3)
+  e.expected[0] = (gltf_tri){0, 1, 2};
+  e.expected[1] = (gltf_tri){0, 2, 3};
+
+  gltf_result it_r = gltf_doc_primitive_iterate_triangles(doc, prim_index, on_tri, &e, &err);
+  TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, r, "iterate_triangles failed");
+  TEST_ASSERT_EQUAL_UINT32_MESSAGE(e.exp_count, e.calls, "fan triangle count mismatch");
+}
+
+void test_03_iterate_triangles_triangle_fan_non_indexed(void) {
+  const char* path = tri_fan_noidx_path();
+
+  gltf_doc* doc = NULL;
+  gltf_error err = (gltf_error){0};
+
+  gltf_result r = gltf_load_file(path, &doc, &err);
+  TEST_ASSERT_TRUE_MESSAGE(r == GLTF_OK && doc != NULL, "gltf_load_file failed");
+
+  uint32_t mi = 0;
+  uint32_t pi = 0;
+  uint32_t prim_index = 0;
+
+  tri_expect e;
+  memset(&e, 0, sizeof(e));
+  e.exp_count = 2;
+
+  // FAN with 4 vertices => 2 triangles:
+  // (0,1,2), (0,2,3)
+  e.expected[0] = (gltf_tri){0, 1, 2};
+  e.expected[1] = (gltf_tri){0, 2, 3};
+
+  gltf_result it_r = gltf_doc_primitive_iterate_triangles(doc, prim_index, on_tri, &e, &err);
+  TEST_ASSERT_EQUAL_INT_MESSAGE(GLTF_OK, it_r, "iterate_triangles failed");
+  TEST_ASSERT_EQUAL_UINT32_MESSAGE(e.exp_count, e.calls, "fan triangle count mismatch");
+
+  gltf_free(doc);
 }
