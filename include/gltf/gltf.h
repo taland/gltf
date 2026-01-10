@@ -21,9 +21,9 @@ typedef struct gltf_error {
 // Result codes returned by public API.
 typedef enum gltf_result {
   GLTF_OK = 0,
-  GLTF_ERR_IO,      // file I/O or allocation failure
-  GLTF_ERR_PARSE,   // invalid JSON or wrong types/structure
-  GLTF_ERR_INVALID  // invalid arguments passed by the caller
+  GLTF_ERR_IO,           // file I/O or allocation failure
+  GLTF_ERR_PARSE,        // invalid JSON or wrong types/structure
+  GLTF_ERR_INVALID,      // invalid arguments passed by the caller
 } gltf_result;
 
 // Span-like view of accessor data.
@@ -629,6 +629,94 @@ gltf_result gltf_doc_primitive_iterate_triangles(const gltf_doc* doc,
                                                 gltf_tri_cb cb,
                                                 void* user,
                                                 gltf_error* out_err);
+
+
+// ----------------------------------------------------------------------------
+// Scene graph evaluation (node transforms)
+// ----------------------------------------------------------------------------
+
+// Opaque cache for computed world matrices.
+// Created per-document and reused across scenes/runs.
+typedef struct gltf_world_cache gltf_world_cache;
+
+// Creates a cache sized for the document's node count.
+//
+// The cache is owned by the caller and must be freed with
+// gltf_world_cache_free().
+//
+// On success:
+//   - returns GLTF_OK
+//   - *out_cache is set to a valid cache
+//
+// On failure:
+//   - returns a non-OK code
+//   - *out_cache is set to NULL
+//   - out_err (if non-NULL) is filled with error context
+gltf_result gltf_world_cache_create(const gltf_doc* doc,
+                                    gltf_world_cache** out_cache,
+                                    gltf_error* out_err);
+
+// Frees a cache created with gltf_world_cache_create().
+// Safe to call with NULL.
+void gltf_world_cache_free(gltf_world_cache* cache);
+
+// Computes world matrices for all nodes reachable from scene roots.
+//
+// Rules:
+//   - world(root) = local(root)
+//   - world(child) = world(parent) * local(child)
+//
+// Local matrix composition for a node:
+//   - if node.matrix is present, it is used and TRS is ignored
+//   - otherwise local = T * R * S
+//
+// Matrices are column-major (glTF convention).
+//
+// On success:
+//   - returns GLTF_OK
+//
+// On failure:
+//   - returns a non-OK code
+//   - out_err (if non-NULL) is filled with error context
+gltf_result gltf_compute_world_matrices(const gltf_doc* doc,
+                                       uint32_t scene_index,
+                                       gltf_world_cache* cache,
+                                       gltf_error* out_err);
+
+// Returns the computed world matrix for a node (column-major).
+//
+// Requirements:
+//   - cache must be created for this document
+//   - gltf_compute_world_matrices() must have been called for a scene that
+//     reaches this node
+//
+// On success:
+//   - returns 1
+//   - out_m16[16] is filled (column-major)
+//
+// On failure:
+//   - returns 0
+//   - out_m16 is not modified
+int gltf_world_matrix(const gltf_doc* doc,
+                      const gltf_world_cache* cache,
+                      uint32_t node_index,
+                      float out_m16[16]);
+
+// Computes the node local matrix (column-major) from glTF node TRS/matrix.
+//
+// If node.matrix is present, TRS is ignored.
+// Otherwise local = T * R * S.
+//
+// On success:
+//   - returns 1
+//   - out_m16[16] is filled
+//
+// On failure (doc NULL, out_m16 NULL, node_index out of range):
+//   - returns 0
+//   - out_m16 is not modified
+int gltf_node_local_matrix(const gltf_doc* doc,
+                           uint32_t node_index,
+                           float out_m16[16]);
 
 
 #ifdef __cplusplus

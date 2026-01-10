@@ -11,7 +11,7 @@
 extern gltf_doc* g_doc;
 
 static const char* sample_path(void) {
-  return GLTF_REPO_ROOT "/tests/fixtures/01_minimal.gltf";
+  return GLTF_REPO_ROOT "/tests/fixtures/01-minimal.gltf";
 }
 
 void test_01_load_sample_minimal(void) {

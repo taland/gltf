@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 int main(int argc, char** argv) {
-  const char* path = "examples/01_dump/sample_minimal.gltf";
+  const char* path = "tests/fixtures/01-minimal.gltf";
   if (argc >= 2 && argv[1] && argv[1][0] != '\0') {
     path = argv[1];
   }

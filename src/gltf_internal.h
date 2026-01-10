@@ -46,11 +46,19 @@ typedef struct gltf_scene {
   gltf_range_u32 nodes; // root node indices (variable length, into doc->indices_u32)
 } gltf_scene;
 
-// Parsed glTF node (name + optional mesh + child nodes).
+// Parsed glTF node (name + optional mesh + child nodes + local transform).
 typedef struct gltf_node {
   gltf_str name;           // optional node name
   int32_t mesh;            // mesh index, or -1 if not present
   gltf_range_u32 children; // child node indices (variable length, into doc->indices_u32)
+
+  // Transform: either matrix, or TRS.
+  int has_matrix;
+  float matrix[16];     // column-major
+
+  float translation[3]; // default (0,0,0)
+  float rotation[4];    // default (0,0,0,1)  // x,y,z,w
+  float scale[3];       // default (1,1,1)
 } gltf_node;
 
 // Parsed glTF primitive.
@@ -181,15 +189,23 @@ static inline int gltf_str_is_valid(gltf_str s) {
   return s.off != GLTF_STR_INVALID_OFF;
 }
 
+
 // ----------------------------------------------------------------------------
 // Error reporting (src/gltf_doc.c)
 // ----------------------------------------------------------------------------
+
 
 void gltf_set_err(gltf_error* out_err,
                   const char* message,
                   const char* path,
                   int line,
                   int col);
+
+void gltf_set_err_if(gltf_error* out_err,
+                     const char* message,
+                     const char* path,
+                     int line, int col);
+
 
 // ----------------------------------------------------------------------------
 // Arena (strings) (src/gltf_memory.c)
@@ -263,6 +279,28 @@ gltf_attr_semantic gltf_parse_semantic(const char* key, uint32_t* out_set_index)
 // Required scalars (src/gltf_parse.c)
 // ----------------------------------------------------------------------------
 
+
+gltf_result gltf_json_get_vec3_f32_opt(yyjson_val* obj,
+                                       const char* key,
+                                       const float default_value[3],
+                                       float out[3],
+                                       const char* err_path,
+                                       gltf_error* out_err);
+
+gltf_result gltf_json_get_vec4_f32_opt(yyjson_val* obj,
+                                       const char* key,
+                                       const float default_value[4],
+                                       float out[4],
+                                       const char* err_path,
+                                       gltf_error* out_err);
+
+gltf_result gltf_json_get_mat4_f32_opt(yyjson_val* obj,
+                                       const char* key,
+                                       const float default_value[16],
+                                       float out[16],
+                                       const char* err_path,
+                                       gltf_error* out_err);
+
 gltf_result gltf_json_get_u32_req(yyjson_val* obj,
                                   const char* key,
                                   uint32_t* out,
@@ -275,9 +313,11 @@ gltf_result gltf_json_get_accessor_type_required(yyjson_val* obj,
                                                  const char* err_path,
                                                  gltf_error* out_err);
 
+
 // ----------------------------------------------------------------------------
 // Arrays (index lists) (src/gltf_parse.c)
 // ----------------------------------------------------------------------------
+
 
 gltf_result gltf_json_get_u32_index_array_range_opt(gltf_doc* doc,
                                                     yyjson_val* obj,
@@ -300,3 +340,33 @@ gltf_result gltf_decode_data_uri(const char* uri,
 uint16_t rd_u16_le(const uint8_t* p);
 
 uint32_t rd_u32_le(const uint8_t* p);
+
+
+// ----------------------------------------------------------------------------
+// Scene graph evaluation (internal)
+// ----------------------------------------------------------------------------
+
+// Cache for computed node world matrices for a single scene.
+//
+// Lifetime:
+//   - created by gltf_world_cache_create()
+//   - reused across gltf_compute_world_matrices() calls
+//   - freed by gltf_world_cache_free()
+//
+// Meaning:
+//   - world_m16[node*16+0 .. node*16+15] holds node world matrix (column-major)
+//   - state[node] tracks DFS progress:
+//       0 = UNVISITED, 1 = VISITING, 2 = DONE
+//
+// Notes:
+//   - Valid only after gltf_compute_world_matrices() succeeds.
+//   - scene_index tells which scene the cache currently represents.
+//   - A node may remain UNVISITED if it is unreachable from scene roots.
+
+typedef struct gltf_world_cache {
+  uint32_t node_count;  // must match doc->node_count
+  float* world_m16;     // node_count * 16 floats, column-major mat4
+  uint8_t* state;       // node_count bytes, DFS state per node
+  uint32_t scene_index; // scene for which matrices were computed
+  int valid;            // 1 if world_m16/state are consistent for scene_index
+} gltf_world_cache;

@@ -59,6 +59,15 @@ void gltf_set_err(gltf_error* out_err,
   out_err->col = col;
 }
 
+void gltf_set_err_if(gltf_error* out_err,
+                     const char* message,
+                     const char* path,
+                     int line, int col) {
+  if (out_err) {
+    gltf_set_err(out_err, message, path, line, col);
+  }
+}
+
 gltf_result gltf_load_file(const char* path,
                            gltf_doc** out_doc,
                            gltf_error* out_err) {
@@ -201,6 +210,65 @@ gltf_result gltf_load_file(const char* path,
           &doc->arena,
           &doc->nodes[node_idx].name,
           "root.nodes[].name",
+          out_err)
+      );
+
+      yyjson_val* v = yyjson_obj_get(node_val, "matrix");
+      doc->nodes[node_idx].has_matrix = v ? 1 : 0;
+
+      GLTF_TRY(
+        gltf_json_get_mat4_f32_opt(
+          node_val,
+          "matrix",
+          (float[16]){
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1
+          },
+          doc->nodes[node_idx].matrix,
+          "root.nodes[].matrix",
+          out_err)
+      );
+
+      GLTF_TRY(
+        gltf_json_get_vec3_f32_opt(
+          node_val,
+          "translation",
+          (float[3]){ 0.f, 0.f, 0.f },
+          doc->nodes[node_idx].translation,
+          "root.nodes[].translation",
+          out_err)
+      );
+
+      GLTF_TRY(
+        gltf_json_get_vec4_f32_opt(
+          node_val,
+          "rotation",
+          (float[4]){ 0.f, 0.f, 0.f, 1.f },
+          doc->nodes[node_idx].rotation,
+          "root.nodes[].rotation",
+          out_err)
+      );
+
+      GLTF_TRY(
+        gltf_json_get_vec3_f32_opt(
+          node_val,
+          "scale",
+          (float[3]){ 1.f, 1.f, 1.f },
+          doc->nodes[node_idx].scale,
+          "root.nodes[].scale",
+          out_err)
+      );
+
+      GLTF_TRY(
+        gltf_json_get_u32_index_array_range_opt(
+          doc,
+          node_val,
+          "children",
+          &doc->nodes[node_idx].children,
+          "root.nodes[].children",
+          "root.nodes[].children[]",
           out_err)
       );
 

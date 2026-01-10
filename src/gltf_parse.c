@@ -35,6 +35,89 @@ int gltf_base64_decode(const char* in,
 
 // Optional scalars
 
+/*
+ * Exception safety:
+ * -----------------
+ * Values are written directly into `out`.
+ * On error, contents of `out` are undefined.
+ *
+ * Contract:
+ *   - `out` is valid only if GLTF_OK is returned.
+ *   - No heap allocations or temporary buffers are used.
+ *
+ * Rationale:
+ *   - Simpler code
+ *   - Better performance
+ *   - Allocation-free parsing
+ */
+static gltf_result gltf_json_get_f32_array_opt_n(yyjson_val* obj,
+                                                 const char* key,
+                                                 const float* default_value,
+                                                 float* out,
+                                                 uint32_t n,
+                                                 const char* err_path,
+                                                 gltf_error* out_err) {
+  if (!out || !default_value || n == 0) {
+    gltf_set_err(out_err, "invalid arguments", err_path, 1, 1);
+    return GLTF_ERR_INVALID;
+  }
+
+  yyjson_val* v = yyjson_obj_get(obj, key);
+  if (!v) {
+    memcpy(out, default_value, (size_t)n * sizeof(float));
+    return GLTF_OK;
+  }
+  if (!yyjson_is_arr(v)) {
+    gltf_set_err(out_err, "must be an array", err_path, 1, 1);
+    return GLTF_ERR_PARSE;
+  }
+
+  const uint32_t s = (uint32_t)yyjson_arr_size(v);
+  if (s != n) {
+    gltf_set_err(out_err, "array has wrong length", err_path, 1, 1);
+    return GLTF_ERR_PARSE;
+  }
+
+  size_t idx, max;
+  yyjson_val* val = NULL;
+  yyjson_arr_foreach(v, idx, max, val) {
+    if (!yyjson_is_num(val)) {
+      gltf_set_err(out_err, "must be a number", err_path, 1, 1);
+      return GLTF_ERR_PARSE;
+    }
+    out[idx] = (float)yyjson_get_num(val);
+  }
+
+  return GLTF_OK;
+}
+
+gltf_result gltf_json_get_vec3_f32_opt(yyjson_val* obj,
+                                       const char* key,
+                                       const float default_value[3],
+                                       float out[3],
+                                       const char* err_path,
+                                       gltf_error* out_err) {
+  return gltf_json_get_f32_array_opt_n(obj, key, default_value, out, 3u, err_path, out_err);
+}
+
+gltf_result gltf_json_get_vec4_f32_opt(yyjson_val* obj,
+                                       const char* key,
+                                       const float default_value[4],
+                                       float out[4],
+                                       const char* err_path,
+                                       gltf_error* out_err) {
+  return gltf_json_get_f32_array_opt_n(obj, key, default_value, out, 4u, err_path, out_err);
+}
+
+gltf_result gltf_json_get_mat4_f32_opt(yyjson_val* obj,
+                                       const char* key,
+                                       const float default_value[16],
+                                       float out[16],
+                                       const char* err_path,
+                                       gltf_error* out_err) {
+  return gltf_json_get_f32_array_opt_n(obj, key, default_value, out, 16u, err_path, out_err);
+}
+
 gltf_result gltf_json_get_u32(yyjson_val* obj,
                               const char* key,
                               uint32_t default_value,

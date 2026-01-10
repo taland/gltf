@@ -1,6 +1,6 @@
 # glTF (C11)
 
-Minimal C11 + CMake project that builds a `gltf` static library, a small example, and tests.
+Minimal C11 + CMake project that builds a `gltf` static library, examples, and tests.
 
 ## Build
 
@@ -26,7 +26,7 @@ Windows (PowerShell):
 You can also pass a path to a `.gltf` file:
 
 ```sh
-./build/bin/gltf_example_01_dump examples/01_dump/sample_minimal.gltf
+./build/bin/gltf_example_01_dump tests/fixtures/01-minimal.gltf
 ```
 
 ## Run tests

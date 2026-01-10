@@ -43,6 +43,7 @@ add_library(gltf STATIC
   src/gltf_primitive.c
   src/gltf_query.c
   src/gltf_util.c
+  src/gltf_world.c
 )
 
 # Do NOT expose yyjson as a public dependency of gltf.
@@ -74,6 +75,11 @@ if(GLTF_BUILD_EXAMPLES)
     examples/01_dump/main.c
   )
   target_link_libraries(gltf_example_01_dump PRIVATE gltf)
+
+  add_executable(gltf_example_04_world_trs
+    examples/04_world_trs/main.c
+  )
+  target_link_libraries(gltf_example_04_world_trs PRIVATE gltf)
 endif()
 
 if(GLTF_BUILD_TESTS)
@@ -84,6 +90,7 @@ if(GLTF_BUILD_TESTS)
     tests/test_01_minimal.c
     tests/test_02_positions_and_indices.c
     tests/test_03_primitives.c
+    tests/test_04_world_matrices_minimal_identity.c
     third_party/unity/unity.c
   )
 
