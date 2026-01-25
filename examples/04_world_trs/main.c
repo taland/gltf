@@ -1,10 +1,50 @@
 #include "gltf/gltf.h"
 
+#include <float.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
+
+// Column-major mat4 (m[col*4 + row]), point (x,y,z,1)
+static inline void mat4_transform_point3(const float m[16],
+                                         const float p[3],
+                                         float out[3]) {
+  const float x = p[0], y = p[1], z = p[2];
+
+  out[0] = m[0]*x + m[4]*y + m[8]*z  + m[12];
+  out[1] = m[1]*x + m[5]*y + m[9]*z  + m[13];
+  out[2] = m[2]*x + m[6]*y + m[10]*z + m[14];
+}
+
+// Build world AABB by transforming 8 corners of local AABB.
+static inline void aabb_transform_world(const float world[16],
+                                        const float local_min[3],
+                                        const float local_max[3],
+                                        float out_min[3],
+                                        float out_max[3]) {
+  out_min[0] = out_min[1] = out_min[2] = +FLT_MAX;
+  out_max[0] = out_max[1] = out_max[2] = -FLT_MAX;
+
+  // 8 corners
+  for (int i = 0; i < 8; ++i) {
+    float p[3] = {
+      (i & 1) ? local_max[0] : local_min[0],
+      (i & 2) ? local_max[1] : local_min[1],
+      (i & 4) ? local_max[2] : local_min[2],
+    };
+
+    float q[3];
+    mat4_transform_point3(world, p, q);
+
+    for (int k = 0; k < 3; ++k) {
+      if (q[k] < out_min[k]) out_min[k] = q[k];
+      if (q[k] > out_max[k]) out_max[k] = q[k];
+    }
+  }
+}
 
 static void mat4_extract_translation(const float m[16], float out_t3[3]) {
   out_t3[0] = m[12];
@@ -38,11 +78,14 @@ static void print_node_line(const gltf_doc* doc,
   mat4_extract_translation(local, lt);
   mat4_extract_scale(local, ls);
 
+
+  const int32_t mesh_index = gltf_doc_node_mesh(doc, node_index);
+
   indent(depth);
   printf("- node[%u] name='%s' mesh=%d\n",
          node_index,
          gltf_doc_node_name(doc, node_index) ? gltf_doc_node_name(doc, node_index) : "(null)",
-         (int)gltf_doc_node_mesh(doc, node_index));
+         (int32_t)mesh_index);
 
   indent(depth + 1);
   printf("local T=(%.3f %.3f %.3f)  S=(%.3f %.3f %.3f)\n",
@@ -58,6 +101,95 @@ static void print_node_line(const gltf_doc* doc,
   } else {
     indent(depth + 1);
     printf("world (not computed / unreachable)\n");
+  }
+
+  // Print AABB
+  if (mesh_index < 0) {
+    indent(depth + 1);
+    printf("aabb (no mesh)\n");
+    return;
+  }
+  
+  uint32_t primitive_count = gltf_doc_mesh_primitive_count(doc, (uint32_t)mesh_index);
+
+  for (uint32_t prim_i = 0; prim_i < primitive_count; prim_i++) {
+    gltf_error err = { 0 };
+    uint32_t prim_index = 0;
+    uint32_t pos_accessor = 0;
+
+    if (!gltf_doc_mesh_primitive(doc, mesh_index, prim_i, &prim_index)) {
+      indent(depth + 1);
+      printf("mesh_primitive failed (mesh=%d prim_i=%u)\n", mesh_index, prim_i);
+      continue;
+    }
+
+    if (!gltf_doc_primitive_find_attribute(doc, prim_index,
+                                           GLTF_ATTR_POSITION,
+                                           0, &pos_accessor)) {
+      indent(depth + 1);
+      printf("POSITION not found (prim=%u)\n", prim_index);
+      continue;
+    }
+
+    uint32_t count = 0, comp = 0, type = 0;
+    int norm = 0;
+
+    if (!gltf_doc_accessor_info(doc, pos_accessor, &count, &comp, &type, &norm)) {
+      indent(depth + 1);
+      printf("accessor_info failed (pos_acc=%u)\n", pos_accessor);
+      continue;
+    }
+
+    if (count == 0) {
+      indent(depth + 1);
+      printf("aabb (empty POSITION)\n");
+      continue;
+    }
+
+    float mn[3], mx[3];
+
+    {
+      float v[3];
+      int rc = gltf_accessor_read_f32(doc, pos_accessor, 0, v, 3, &err);
+      if (rc != GLTF_OK) {
+        indent(depth + 1);
+        printf("read_f32 failed (i=0): %s\n", err.message ? err.message : "(null)");
+        continue;
+      }
+
+      mn[0] = mx[0] = v[0];
+      mn[1] = mx[1] = v[1];
+      mn[2] = mx[2] = v[2];
+    }
+
+    for (uint32_t i = 1; i < count; i++) {
+      float v[3];
+
+      int rc = gltf_accessor_read_f32(doc, pos_accessor, i, v, 3, &err);
+      if (rc != GLTF_OK) {
+        indent(depth + 1);
+        printf("read_f32 failed (i=%u): %s\n", i, err.message ? err.message : "(null)");
+        continue;
+      }
+
+      for (uint32_t k = 0; k < 3; k++) {
+        if (v[k] < mn[k]) mn[k] = v[k];
+        if (v[k] > mx[k]) mx[k] = v[k];
+      }
+    }
+
+    indent(depth + 1);
+    printf("local aabb MIN=(%.3f %.3f %.3f)  MAX=(%.3f %.3f %.3f)\n",
+           mn[0], mn[1], mn[2], mx[0], mx[1], mx[2]);
+
+    if (has_world) {
+      float wmn[3], wmx[3];
+      aabb_transform_world(world, mn, mx, wmn, wmx);
+
+      indent(depth + 1);
+      printf("world aabb MIN=(%.3f %.3f %.3f)  MAX=(%.3f %.3f %.3f)\n",
+             wmn[0], wmn[1], wmn[2], wmx[0], wmx[1], wmx[2]);
+    }
   }
 }
 

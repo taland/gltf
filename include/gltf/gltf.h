@@ -6,6 +6,11 @@
 extern "C" {
 #endif
 
+typedef enum gltf_bool {
+  GLTF_FALSE = 0,
+  GLTF_TRUE  = 1
+} gltf_bool;
+
 // Opaque document handle.
 // All memory is owned by the document and freed via gltf_free().
 typedef struct gltf_doc gltf_doc;
@@ -717,6 +722,275 @@ int gltf_world_matrix(const gltf_doc* doc,
 int gltf_node_local_matrix(const gltf_doc* doc,
                            uint32_t node_index,
                            float out_m16[16]);
+
+
+// ----------------------------------------------------------------------------
+// Materials / Textures (glTF 2.0 core)
+// ----------------------------------------------------------------------------
+//
+// This API exposes material parameters and texture references as stored in glTF.
+// It does NOT decode image formats (PNG/JPEG). Images are reported as:
+//   - URI (relative/absolute path),
+//   - data URI,
+//   - bufferView reference (typical for .glb).
+//
+// Texture wiring is always:
+//   Material TextureInfo.index -> textures[] -> images[] (+ optional samplers[]).
+// ----------------------------------------------------------------------------
+
+
+// glTF texture slot reference (TextureInfo).
+//
+// Defaults:
+//   - index   = -1 (texture slot absent)
+//   - tex_coord = 0
+typedef struct gltf_texture_info {
+  int32_t index;      // textures[] index, -1 if absent
+  int32_t tex_coord;  // TEXCOORD_<tex_coord>, default 0
+} gltf_texture_info;
+
+
+// glTF normal texture slot (NormalTextureInfo).
+//
+// Defaults:
+//   - base.index = -1
+//   - base.tex_coord = 0
+//   - scale = 1.0
+typedef struct gltf_normal_texture_info {
+  gltf_texture_info base;
+  float scale;        // normal scale, default 1.0
+} gltf_normal_texture_info;
+
+
+// glTF occlusion texture slot (OcclusionTextureInfo).
+//
+// Defaults:
+//   - base.index = -1
+//   - base.tex_coord = 0
+//   - strength = 1.0
+typedef struct gltf_occlusion_texture_info {
+  gltf_texture_info base;
+  float strength;     // occlusion strength, default 1.0
+} gltf_occlusion_texture_info;
+
+
+// glTF PBR metallic-roughness model (pbrMetallicRoughness).
+//
+// Defaults (when the pbrMetallicRoughness object is absent):
+//   - base_color_factor = (1,1,1,1)
+//   - metallic_factor  = 1
+//   - roughness_factor = 1
+//   - base_color_texture.index = -1
+//   - metallic_roughness_texture.index = -1
+//
+// Channel convention for metallic_roughness_texture (JSON: metallicRoughnessTexture):
+//   - roughness is stored in the G channel
+//   - metallic  is stored in the B channel
+typedef struct gltf_pbr_metallic_roughness {
+  float base_color_factor[4];             // RGBA, default (1,1,1,1)
+  gltf_texture_info base_color_texture;   // optional
+
+  float metallic_factor;                 // default 1
+  float roughness_factor;                // default 1
+  gltf_texture_info metallic_roughness_texture; // optional
+} gltf_pbr_metallic_roughness;
+
+
+// Material alpha mode (alpha_mode, JSON: alphaMode).
+typedef enum gltf_alpha_mode {
+  GLTF_ALPHA_OPAQUE = 0,
+  GLTF_ALPHA_MASK   = 1,
+  GLTF_ALPHA_BLEND  = 2
+} gltf_alpha_mode;
+
+
+// glTF material.
+//
+// Defaults:
+//   - name: NULL
+//   - pbr.* defaults as described in gltf_pbr_metallic_roughness
+//   - normal_texture.base.index = -1, tex_coord = 0, scale = 1
+//   - occlusion_texture.base.index = -1, tex_coord = 0, strength = 1
+//   - emissive_texture.index = -1, tex_coord = 0
+//   - emissive_factor = (0,0,0)
+//   - alpha_mode = OPAQUE
+//   - alpha_cutoff = 0.5
+//   - double_sided = 0
+typedef struct gltf_material {
+  const char* name; // owned by doc; valid until gltf_free()
+
+  gltf_pbr_metallic_roughness pbr;
+
+  gltf_normal_texture_info normal_texture;        // optional
+  gltf_occlusion_texture_info occlusion_texture;  // optional
+
+  gltf_texture_info emissive_texture;             // optional
+  float emissive_factor[3];                       // default (0,0,0)
+
+  gltf_alpha_mode alpha_mode; // default OPAQUE
+  float alpha_cutoff;         // default 0.5 (used when alpha_mode == MASK)
+  gltf_bool double_sided;     // boolean 0/1, default 0
+} gltf_material;
+
+
+// glTF sampler (texture sampling state).
+//
+// Defaults:
+//   - wrap_s = REPEAT (10497)
+//   - wrap_t = REPEAT (10497)
+//   - min_filter = -1 (unspecified)
+//   - mag_filter = -1 (unspecified)
+typedef struct gltf_sampler {
+  int32_t mag_filter; // -1 if absent, else GL enum value
+  int32_t min_filter; // -1 if absent, else GL enum value
+  int32_t wrap_s;     // default 10497 (REPEAT)
+  int32_t wrap_t;     // default 10497 (REPEAT)
+} gltf_sampler;
+
+
+// Image reference kind (no decoding performed).
+typedef enum gltf_image_kind {
+  GLTF_IMAGE_URI = 0,         // images[i].uri is a normal URI / path
+  GLTF_IMAGE_DATA_URI = 1,    // images[i].uri is a data URI (data:...)
+  GLTF_IMAGE_BUFFER_VIEW = 2, // images[i].buffer_view is set (typical for .glb)
+  GLTF_IMAGE_NONE = 3         // no source (rare), treat as missing
+} gltf_image_kind;
+
+
+// glTF image reference.
+//
+// For kind == GLTF_IMAGE_URI:
+//   - uri is set (relative/absolute)
+//   - resolved may be set (absolute filesystem path)
+//
+// For kind == GLTF_IMAGE_DATA_URI:
+//   - uri is set (data:...)
+//   - resolved is NULL
+//
+// For kind == GLTF_IMAGE_BUFFER_VIEW:
+//   - buffer_view is set (>= 0)
+//   - mimeType should be set
+//   - uri/resolved may be NULL
+typedef struct gltf_image {
+  const char* name;       // optional, owned by doc
+  gltf_image_kind kind;
+
+  const char* uri;        // raw URI (relative, absolute, or data:)
+  const char* resolved;   // resolved filesystem path for GLTF_IMAGE_URI, else NULL
+  int32_t buffer_view;    // >=0 for GLTF_IMAGE_BUFFER_VIEW, else -1
+  const char* mime_type;  // optional (required when bufferView is used)
+} gltf_image;
+
+
+// glTF texture object.
+//
+// References:
+//   - sampler -> samplers[sampler] (optional, -1 if absent)
+//   - source  -> images[source]    (optional, -1 if absent)
+typedef struct gltf_texture {
+  int32_t sampler; // samplers[] index, -1 if absent
+  int32_t source;  // images[] index, -1 if absent
+} gltf_texture;
+
+
+// ----------------------------------------------------------------------------
+// Materials / Textures query API
+// ----------------------------------------------------------------------------
+
+
+// Returns the number of materials in the document.
+// If doc is NULL, returns 0.
+uint32_t gltf_doc_material_count(const gltf_doc* doc);
+
+
+// Returns a read-only pointer to doc-owned material storage.
+//
+// On success:
+//   - returns 1
+//   - out_mat is set to point to the material
+//
+// On failure (doc NULL, out_mat NULL, material_index out of range):
+//   - returns 0
+//   - out_mat is not modified
+int gltf_doc_material(const gltf_doc* doc,
+                      uint32_t material_index,
+                      const gltf_material** out_mat);
+
+
+// Returns the number of textures in the document.
+// If doc is NULL, returns 0.
+uint32_t gltf_doc_texture_count(const gltf_doc* doc);
+
+
+// Returns a read-only pointer to doc-owned texture storage.
+//
+// On success:
+//   - returns 1
+//   - out_tex is set to point to the texture
+//
+// On failure (doc NULL, out_tex NULL, texture_index out of range):
+//   - returns 0
+//   - out_tex is not modified
+int gltf_doc_texture(const gltf_doc* doc,
+                     uint32_t texture_index,
+                     const gltf_texture** out_tex);
+
+
+// Returns the number of images in the document.
+// If doc is NULL, returns 0.
+uint32_t gltf_doc_image_count(const gltf_doc* doc);
+
+
+// Returns a read-only pointer to doc-owned image storage.
+//
+// On success:
+//   - returns 1
+//   - out_img is set to point to the image
+//
+// On failure (doc NULL, out_img NULL, image_index out of range):
+//   - returns 0
+//   - out_img is not modified
+int gltf_doc_image(const gltf_doc* doc,
+                   uint32_t image_index,
+                   const gltf_image** out_img);
+
+
+// Returns the number of samplers in the document.
+// If doc is NULL, returns 0.
+uint32_t gltf_doc_sampler_count(const gltf_doc* doc);
+
+
+// Returns a read-only pointer to doc-owned sampler storage.
+//
+// On success:
+//   - returns 1
+//   - out_samp is set to point to the sampler
+//
+// On failure (doc NULL, out_samp NULL, sampler_index out of range):
+//   - returns 0
+//   - out_samp is not modified
+int gltf_doc_sampler(const gltf_doc* doc,
+                     uint32_t sampler_index,
+                     const gltf_sampler** out_samp);
+
+
+// Returns a resolved image reference string suitable for reporting/logging.
+//
+// For GLTF_IMAGE_URI:
+//   - returns image.resolved if available, otherwise returns image.uri
+//
+// For GLTF_IMAGE_DATA_URI:
+//   - returns image.uri (data:...)
+//
+// For GLTF_IMAGE_BUFFER_VIEW:
+//   - returns NULL
+//
+// For GLTF_IMAGE_NONE:
+//   - returns NULL
+//
+// On failure (doc NULL, image_index out of range):
+//   - returns NULL
+const char* gltf_image_resolved_uri(const gltf_doc* doc, uint32_t image_index);
 
 
 #ifdef __cplusplus

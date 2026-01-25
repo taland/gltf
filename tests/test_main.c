@@ -15,6 +15,7 @@ void test_03_iterate_triangles_triangle_strip_non_indexed(void);
 void test_03_iterate_triangles_triangle_fan_indexed(void);
 void test_03_iterate_triangles_triangle_fan_non_indexed(void);
 void test_04_world_matrices_trs_and_matrix(void);
+void test_05_materials(void);
 
 void setUp(void) {
     g_doc = NULL;
@@ -39,6 +40,7 @@ int main(void) {
   RUN_TEST(test_03_iterate_triangles_triangle_fan_indexed);
   RUN_TEST(test_03_iterate_triangles_triangle_fan_non_indexed);
   RUN_TEST(test_04_world_matrices_trs_and_matrix);
+  RUN_TEST(test_05_materials);
 
   return UNITY_END();
 }

@@ -2,6 +2,8 @@
 
 Minimal C11 + CMake project that builds a `gltf` static library, examples, and tests.
 
+glTF 2.0 spec reference: https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
+
 ## Build
 
 ```sh

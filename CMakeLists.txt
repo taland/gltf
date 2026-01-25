@@ -71,15 +71,14 @@ if(GLTF_WARNINGS_AS_ERRORS)
 endif()
 
 if(GLTF_BUILD_EXAMPLES)
-  add_executable(gltf_example_01_dump
-    examples/01_dump/main.c
-  )
+  add_executable(gltf_example_01_dump examples/01_dump/main.c)
   target_link_libraries(gltf_example_01_dump PRIVATE gltf)
 
-  add_executable(gltf_example_04_world_trs
-    examples/04_world_trs/main.c
-  )
+  add_executable(gltf_example_04_world_trs examples/04_world_trs/main.c)
   target_link_libraries(gltf_example_04_world_trs PRIVATE gltf)
+
+  add_executable(gltf_example_05_material_report examples/05_material_report/main.c)
+  target_link_libraries(gltf_example_05_material_report PRIVATE gltf)
 endif()
 
 if(GLTF_BUILD_TESTS)
@@ -91,6 +90,7 @@ if(GLTF_BUILD_TESTS)
     tests/test_02_positions_and_indices.c
     tests/test_03_primitives.c
     tests/test_04_world_matrices_minimal_identity.c
+    tests/test_05_materials.c
     third_party/unity/unity.c
   )
 

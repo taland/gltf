@@ -117,12 +117,18 @@ typedef struct gltf_buffer {
 //   - All memory is owned by the document and freed in gltf_free().
 //   - Relationships are expressed via indices:
 //       scenes -> nodes -> meshes -> primitives -> accessors -> bufferViews -> buffers
+//       materials -> textures -> images (+ optional samplers)
 struct gltf_doc {
   // asset.version is small; store inline for quick access and no arena lookup.
   char asset_version[8];
 
   // Optional asset.generator string stored in arena (invalid if absent).
   gltf_str asset_generator;
+
+  // Directory of the loaded .gltf file (UTF-8, NUL-terminated, stored in arena).
+  // Used to resolve relative image URIs (images[i].uri -> images[i].resolved).
+  // Invalid if the document was not loaded from a filesystem path.
+  gltf_str doc_dir;
 
   // Default scene index from top-level "scene" property,
   // or GLTF_DOC_DEFAULT_SCENE_INVALID if not specified.
@@ -138,6 +144,12 @@ struct gltf_doc {
   uint32_t buffer_view_count;
   uint32_t accessor_count;
 
+  // Material / texture arrays (0 if absent).
+  uint32_t material_count;
+  uint32_t texture_count;
+  uint32_t image_count;
+  uint32_t sampler_count;
+
   // Parsed arrays (owned).
   //
   // All arrays are flat and indexed by integer handles.
@@ -150,6 +162,12 @@ struct gltf_doc {
   gltf_buffer* buffers;           // [buffer_count]
   gltf_buffer_view* buffer_views; // [buffer_view_count]
   gltf_accessor* accessors;       // [accessor_count]
+
+  // Materials / textures (owned).
+  gltf_material* materials;       // [material_count]
+  gltf_texture* textures;         // [texture_count]
+  gltf_image* images;             // [image_count]
+  gltf_sampler* samplers;         // [sampler_count]
 
   // Shared index pool for all variable-length arrays (owned).
   //
@@ -171,8 +189,10 @@ struct gltf_doc {
   //
   // Stores UTF-8 NUL-terminated strings:
   // - names
-  // - URIs
+  // - URIs (raw)
+  // - resolved filesystem paths
   // - generator
+  // - doc_dir
   gltf_arena arena;
 };
 
@@ -258,12 +278,33 @@ gltf_result gltf_json_get_i32(yyjson_val* obj,
                               const char* err_path,
                               gltf_error* out_err);
 
+gltf_result gltf_json_get_f32(yyjson_val* obj,
+                              const char* key,
+                              float default_value,
+                              float* out,
+                              const char* err_path,
+                              gltf_error* out_err);
+
 gltf_result gltf_json_get_bool(yyjson_val* obj,
                                const char* key,
                                int default_value,
-                               uint8_t* out,
+                               gltf_bool* out,
                                const char* err_path,
                                gltf_error* out_err);
+
+gltf_result gltf_json_get_bool_u8(yyjson_val* obj,
+                                  const char* key,
+                                  int default_value,
+                                  uint8_t* out,
+                                  const char* err_path,
+                                  gltf_error* out_err);
+
+gltf_result gltf_json_get_material_alpha_mode(yyjson_val* obj,
+                                              const char* key,
+                                              gltf_alpha_mode default_value,
+                                              gltf_alpha_mode* out,
+                                              const char* err_path,
+                                              gltf_error* out_err);
 
 gltf_result gltf_json_get_str_opt_dup_arena(yyjson_val* obj,
                                             const char* key,
@@ -271,6 +312,13 @@ gltf_result gltf_json_get_str_opt_dup_arena(yyjson_val* obj,
                                             gltf_str* out,
                                             const char* err_path,
                                             gltf_error* out_err);
+
+gltf_result gltf_json_get_str_opt_dup_arena_cstr(yyjson_val* obj,
+                                                 const char* key,
+                                                 gltf_arena* arena,
+                                                 const char** out,
+                                                 const char* err_path,
+                                                 gltf_error* out_err);
 
 gltf_attr_semantic gltf_parse_semantic(const char* key, uint32_t* out_set_index);
 
@@ -326,6 +374,49 @@ gltf_result gltf_json_get_u32_index_array_range_opt(gltf_doc* doc,
                                                     const char* err_path_arr,
                                                     const char* err_path_elem,
                                                     gltf_error* out_err);
+
+// Parsing utilities for gltf_doc.c
+
+gltf_result gltf_parse_scenes(gltf_doc* doc,
+                    yyjson_val* root,
+                              gltf_error* out_err);
+
+gltf_result gltf_parse_nodes(gltf_doc* doc,
+                    yyjson_val* root,
+                             gltf_error* out_err);
+
+gltf_result gltf_parse_meshes(gltf_doc* doc,
+                    yyjson_val* root,
+                              gltf_error* out_err);
+
+gltf_result gltf_parse_accessors(gltf_doc* doc,
+                      yyjson_val* root,
+                                 gltf_error* out_err);
+
+gltf_result gltf_parse_buffer_views(gltf_doc* doc,
+                        yyjson_val* root,
+                                    gltf_error* out_err);
+
+gltf_result gltf_parse_buffers(gltf_doc* doc,
+                               yyjson_val* root,
+                               const char* doc_path,
+                               gltf_error* out_err);
+
+gltf_result gltf_parse_images(gltf_doc* doc,
+                              yyjson_val* root,
+                              gltf_error* out_err);
+
+gltf_result gltf_parse_samplers(gltf_doc* doc,
+                                yyjson_val* root,
+                                gltf_error* out_err);
+
+gltf_result gltf_parse_textures(gltf_doc* doc,
+                                yyjson_val* root,
+                                gltf_error* out_err);
+
+gltf_result gltf_parse_materials(gltf_doc* doc,
+                                 yyjson_val* root,
+                                 gltf_error* out_err);
 
 gltf_result gltf_decode_data_uri(const char* uri,
                                  uint32_t expected_len,

@@ -128,3 +128,108 @@ const char* gltf_doc_mesh_name(const gltf_doc* doc, uint32_t mesh_index) {
   if (mesh_index >= doc->mesh_count) return NULL;
   return arena_get_str(&doc->arena, doc->meshes[mesh_index].name);
 }
+
+// ----------------------------------------------------------------------------
+// Materials
+// ----------------------------------------------------------------------------
+
+uint32_t gltf_doc_material_count(const gltf_doc* doc) {
+  return doc ? doc->material_count : 0u;
+}
+
+int gltf_doc_material(const gltf_doc* doc,
+                      uint32_t material_index,
+                      const gltf_material** out_mat) {
+  if (!doc) return 0;
+  if (!out_mat) return 0;
+  if (material_index >= doc->material_count) return 0;
+
+  *out_mat = &doc->materials[material_index];
+  return 1;
+}
+
+
+// ----------------------------------------------------------------------------
+// Textures
+// ----------------------------------------------------------------------------
+
+uint32_t gltf_doc_texture_count(const gltf_doc* doc) {
+  return doc ? doc->texture_count : 0u;
+}
+
+int gltf_doc_texture(const gltf_doc* doc,
+                     uint32_t texture_index,
+                     const gltf_texture** out_tex) {
+  if (!doc) return 0;
+  if (!out_tex) return 0;
+  if (texture_index >= doc->texture_count) return 0;
+
+  *out_tex = &doc->textures[texture_index];
+  return 1;
+}
+
+
+// ----------------------------------------------------------------------------
+// Images
+// ----------------------------------------------------------------------------
+
+uint32_t gltf_doc_image_count(const gltf_doc* doc) {
+  return doc ? doc->image_count : 0u;
+}
+
+int gltf_doc_image(const gltf_doc* doc,
+                   uint32_t image_index,
+                   const gltf_image** out_img) {
+  if (!doc) return 0;
+  if (!out_img) return 0;
+  if (image_index >= doc->image_count) return 0;
+
+  *out_img = &doc->images[image_index];
+  return 1;
+}
+
+
+// ----------------------------------------------------------------------------
+// Samplers
+// ----------------------------------------------------------------------------
+
+uint32_t gltf_doc_sampler_count(const gltf_doc* doc) {
+  return doc ? doc->sampler_count : 0u;
+}
+
+int gltf_doc_sampler(const gltf_doc* doc,
+                     uint32_t sampler_index,
+                     const gltf_sampler** out_samp) {
+  if (!doc) return 0;
+  if (!out_samp) return 0;
+  if (sampler_index >= doc->sampler_count) return 0;
+
+  *out_samp = &doc->samplers[sampler_index];
+  return 1;
+}
+
+
+// ----------------------------------------------------------------------------
+// Image helpers
+// ----------------------------------------------------------------------------
+
+const char* gltf_image_resolved_uri(const gltf_doc* doc, uint32_t image_index) {
+  if (!doc) return NULL;
+  if (image_index >= doc->image_count) return NULL;
+
+  const gltf_image* img = &doc->images[image_index];
+
+  switch (img->kind) {
+    case GLTF_IMAGE_URI:
+      // Prefer resolved filesystem path if available.
+      return img->resolved ? img->resolved : img->uri;
+
+    case GLTF_IMAGE_DATA_URI:
+      return img->uri;
+
+    case GLTF_IMAGE_BUFFER_VIEW:
+    case GLTF_IMAGE_NONE:
+    default:
+      return NULL;
+  }
+}

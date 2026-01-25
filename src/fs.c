@@ -146,3 +146,41 @@ gltf_fs_status gltf_fs_read_file_exact_u32(const char* path,
   if (out_len) *out_len = want;
   return GLTF_FS_OK;
 }
+
+// Returns 1 if path is filesystem-relative, 0 otherwise.
+//
+// Non-relative paths include:
+//   - absolute POSIX paths (/foo/bar)
+//   - Windows absolute paths (C:\foo, C:/foo)
+//   - Windows UNC paths (\\server\share)
+//   - URIs with schemes (data:, http:, file:, etc.)
+int gltf_path_is_relative(const char* path) {
+  if (!path || !path[0]) return 1;
+
+  // Windows UNC path "\\server\share"
+  if (path[0] == '\\' && path[1] == '\\') return 0;
+
+  // data: and other schemes are not filesystem-relative
+  if ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) {
+    // scheme: "something:"
+    const char* p = path;
+    while ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+           (*p >= '0' && *p <= '9') || *p == '+' || *p == '-' || *p == '.') {
+      p++;
+    }
+    if (*p == ':') {
+      return 0;
+    }
+  }
+
+  // Absolute POSIX path
+  if (path[0] == '/') return 0;
+
+  // Windows absolute path "C:\"
+  if (((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
+      path[1] == ':' && (path[2] == '\\' || path[2] == '/')) {
+    return 0;
+  }
+
+  return 1;
+}
