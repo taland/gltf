@@ -28,7 +28,9 @@ typedef enum gltf_result {
   GLTF_OK = 0,
   GLTF_ERR_IO,           // file I/O or allocation failure
   GLTF_ERR_PARSE,        // invalid JSON or wrong types/structure
+  GLTF_ERR_RANGE,        // requested index out of range
   GLTF_ERR_INVALID,      // invalid arguments passed by the caller
+  GLTF_ERR_UNSUPPORTED,  // feature not compiled in (e.g. images)
 } gltf_result;
 
 // Span-like view of accessor data.
@@ -991,6 +993,50 @@ int gltf_doc_sampler(const gltf_doc* doc,
 // On failure (doc NULL, image_index out of range):
 //   - returns NULL
 const char* gltf_image_resolved_uri(const gltf_doc* doc, uint32_t image_index);
+
+
+// ----------------------------------------------------------------------------
+// Images (decode / export)
+// ----------------------------------------------------------------------------
+// Decodes PNG/JPEG (and other formats supported by the compiled backend)
+// from glTF image sources:
+// - external URI files
+// - embedded base64 data URI
+// - GLB BIN via bufferView
+//
+// Note: if the library is built without image decoding support,
+// functions return GLTF_ERR_UNSUPPORTED.
+
+typedef enum gltf_image_pixel_format {
+  GLTF_PIXEL_RGBA8 = 1
+} gltf_image_pixel_format;
+
+typedef struct gltf_image_pixels {
+  gltf_image_pixel_format format; // always GLTF_PIXEL_RGBA8 in this iteration
+  uint32_t width;
+  uint32_t height;
+  uint32_t stride_bytes; // width * 4
+  uint8_t* pixels;       // owned by caller; free via gltf_image_pixels_free()
+} gltf_image_pixels;
+
+// Decode doc.images[image_index] into RGBA8 pixels.
+// On success: returns GLTF_OK and fills out_pixels.
+// On failure: returns non-OK and out_pixels is not modified.
+gltf_result gltf_image_decode_rgba8(const gltf_doc* doc,
+                                    uint32_t image_index,
+                                    gltf_image_pixels* out_pixels,
+                                    gltf_error* out_err);
+
+// Convenience: write RGBA8 buffer as PNG to disk (used by examples).
+gltf_result gltf_write_png_rgba8(const char* path,
+                                 uint32_t width,
+                                 uint32_t height,
+                                 const uint8_t* rgba_pixels,
+                                 gltf_error* out_err);
+
+// Frees pixels allocated by gltf_image_decode_rgba8().
+// Safe to call with NULL or with p->pixels == NULL.
+void gltf_image_pixels_free(gltf_image_pixels* p);
 
 
 #ifdef __cplusplus

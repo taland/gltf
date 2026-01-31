@@ -1,0 +1,18 @@
+{
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [
+    { "nodes": [0] }
+  ],
+  "nodes": [
+    { "mesh": 0 }
+  ],
+  "meshes": [
+    { "primitives": [ { "attributes": {} } ] }
+  ],
+  "images": [
+    {
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+    }
+  ]
+}

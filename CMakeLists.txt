@@ -16,11 +16,13 @@ option(GLTF_USE_VENDORED_YYJSON "Use vendored yyjson from third_party/yyjson" ON
 # Set OFF for strict/offline CI builds.
 option(GLTF_ALLOW_FETCHCONTENT_FALLBACK "Allow downloading deps via FetchContent" ON)
 
+option(GLTF_ENABLE_IMAGES "Enable image decoding via stb" ON)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-# Dependencies (provides yyjson::yyjson)
+# Dependencies (provides yyjson::yyjson, stb::stb)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/deps.cmake)
 
 # Put all runtime binaries in ${CMAKE_BINARY_DIR}/bin
@@ -44,10 +46,19 @@ add_library(gltf STATIC
   src/gltf_query.c
   src/gltf_util.c
   src/gltf_world.c
+  src/gltf_images.c
 )
 
 # Do NOT expose yyjson as a public dependency of gltf.
 target_link_libraries(gltf PRIVATE yyjson::yyjson)
+
+target_compile_definitions(gltf PRIVATE
+  GLTF_ENABLE_IMAGES=$<BOOL:${GLTF_ENABLE_IMAGES}>
+)
+
+if(GLTF_ENABLE_IMAGES)
+  target_link_libraries(gltf PRIVATE stb::stb)
+endif()
 
 target_include_directories(gltf
   PUBLIC
@@ -79,6 +90,9 @@ if(GLTF_BUILD_EXAMPLES)
 
   add_executable(gltf_example_05_material_report examples/05_material_report/main.c)
   target_link_libraries(gltf_example_05_material_report PRIVATE gltf)
+
+  add_executable(gltf_example_06_extract_textures examples/06_extract_textures/main.c)
+  target_link_libraries(gltf_example_06_extract_textures PRIVATE gltf)
 endif()
 
 if(GLTF_BUILD_TESTS)
@@ -91,6 +105,7 @@ if(GLTF_BUILD_TESTS)
     tests/test_03_primitives.c
     tests/test_04_world_matrices_minimal_identity.c
     tests/test_05_materials.c
+    tests/test_06_images_datauri.c
     third_party/unity/unity.c
   )
 
