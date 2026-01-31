@@ -4,6 +4,24 @@ Minimal C11 + CMake project that builds a `gltf` static library, examples, and t
 
 glTF 2.0 spec reference: https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
 
+## Contents
+
+- [Quick start](#quick-start)
+- [Build](#build)
+- [IDE builds (Xcode / VS 2022)](#ide-builds-xcode--vs-2022)
+- [Examples](#examples)
+- [Tests](#tests)
+- [Project layout](#project-layout)
+- [Requirements](#requirements)
+
+## Quick start
+
+```sh
+cmake -S . -B build
+cmake --build build
+./build/bin/gltf_example_01_dump tests/fixtures/01-minimal.gltf
+```
+
 ## Build
 
 ```sh
@@ -11,27 +29,27 @@ cmake -S . -B build
 cmake --build build
 ```
 
-## Run example
+## IDE builds (Xcode / VS 2022)
 
-macOS/Linux:
+Xcode (macOS):
 
 ```sh
-./build/bin/gltf_example_01_dump
+cmake -S . -B build-xcode -G Xcode
+cmake --build build-xcode
 ```
 
-Windows (PowerShell):
+Visual Studio 2022 (Windows, x64):
 
 ```powershell
-.\build\bin\gltf_example_01_dump.exe
+cmake -S . -B build-vs2022 -G "Visual Studio 17 2022" -A x64
+cmake --build build-vs2022
 ```
 
-You can also pass a path to a `.gltf` file:
+## Examples
 
-```sh
-./build/bin/gltf_example_01_dump tests/fixtures/01-minimal.gltf
-```
+See the examples guide in [examples/README.md](examples/README.md).
 
-## Run tests
+## Tests
 
 Configure/build as usual:
 
@@ -51,3 +69,16 @@ Or run the test binary directly:
 ```sh
 ./build/bin/gltf_tests
 ```
+
+## Project layout
+
+- `include/gltf/` public headers
+- `src/` library sources
+- `examples/` example programs
+- `tests/` test sources and fixtures
+- `third_party/` third-party dependencies
+
+## Requirements
+
+- C11 compiler
+- CMake 3.25+ (or newer)
