@@ -6,6 +6,7 @@ gltf_doc* g_doc = NULL;
 
 // Test declarations
 void test_01_load_sample_minimal(void);
+void test_01_load_gltf_from_memory(void);
 void test_02_load_positions_and_indices(void);
 void test_02_embedded_load_positions(void);
 void test_03_primitives(void);
@@ -17,6 +18,8 @@ void test_03_iterate_triangles_triangle_fan_non_indexed(void);
 void test_04_world_matrices_trs_and_matrix(void);
 void test_05_materials(void);
 void test_06_images_datauri(void);
+void test_07_load_glb(void);
+void test_07_load_glb_from_mem(void);
 
 void setUp(void) {
     g_doc = NULL;
@@ -32,6 +35,7 @@ int main(void) {
   UNITY_BEGIN();
 
   RUN_TEST(test_01_load_sample_minimal);
+  RUN_TEST(test_01_load_gltf_from_memory);
   RUN_TEST(test_02_load_positions_and_indices);
   RUN_TEST(test_02_embedded_load_positions);
   RUN_TEST(test_03_primitives);
@@ -43,6 +47,7 @@ int main(void) {
   RUN_TEST(test_04_world_matrices_trs_and_matrix);
   RUN_TEST(test_05_materials);
   RUN_TEST(test_06_images_datauri);
-
+  RUN_TEST(test_07_load_glb);
+  RUN_TEST(test_07_load_glb_from_mem);
   return UNITY_END();
 }

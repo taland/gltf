@@ -2,6 +2,9 @@
 
 #include "gltf/gltf.h"
 
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
 #ifndef GLTF_REPO_ROOT
@@ -106,4 +109,105 @@ void test_01_load_sample_minimal(void) {
   // mesh API
   TEST_ASSERT_NULL(gltf_doc_mesh_name(g_doc, 0)); // meshes[0] has no name in sample
   TEST_ASSERT_NULL(gltf_doc_mesh_name(g_doc, 1)); // out-of-range => NULL
+}
+
+void test_01_load_gltf_from_memory(void) {
+  /*
+    BIN layout (42 bytes, padded to 44):
+    - positions: 3 * vec3 f32 = 36 bytes
+    - indices:   3 * u16     = 6 bytes
+    - padding:   2 bytes
+
+    base64 generated once and hardcoded
+  */
+    const char* json =
+      "{"
+      "  \"asset\": { \"version\": \"2.0\" },"
+      "  \"buffers\": [ {"
+      "    \"uri\": \"data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAABAAIAAAA=\","
+      "    \"byteLength\": 44"
+      "  } ],"
+      "  \"bufferViews\": ["
+      "    { \"buffer\": 0, \"byteOffset\": 0,  \"byteLength\": 36 },"
+      "    { \"buffer\": 0, \"byteOffset\": 36, \"byteLength\": 6 }"
+      "  ],"
+      "  \"accessors\": ["
+      "    { \"bufferView\": 0, \"byteOffset\": 0, \"componentType\": 5126, \"count\": 3, \"type\": \"VEC3\" },"
+      "    { \"bufferView\": 1, \"byteOffset\": 0, \"componentType\": 5123, \"count\": 3, \"type\": \"SCALAR\" }"
+      "  ],"
+      "  \"meshes\": [ {"
+      "    \"primitives\": [ { \"attributes\": { \"POSITION\": 0 }, \"indices\": 1 } ]"
+      "  } ],"
+      "  \"nodes\": ["
+      "    { \"mesh\": 0 },"
+      "    { \"name\": \"dummy\" }"
+      "  ],"
+      "  \"scenes\": [ { \"nodes\": [ 0 ] } ],"
+      "  \"scene\": 0"
+      "}";
+
+  gltf_doc* doc = NULL;
+  gltf_error err = {0};
+
+  gltf_result rc =
+    gltf_load_json_string((uint8_t*)json,
+                          (uint32_t)strlen(json),
+                          &doc,
+                          &err);
+
+  if (rc != GLTF_OK) {
+    char buf[512];
+    snprintf(buf, sizeof(buf),
+             "gltf_load_json_string failed rc=%d msg=%s path=%s",
+             rc,
+             err.message ? err.message : "(null)",
+             err.path ? err.path : "(null)");
+    TEST_FAIL_MESSAGE(buf);
+  }
+
+  TEST_ASSERT_NOT_NULL(doc);
+
+  const char* ver = gltf_doc_asset_version(doc);
+  TEST_ASSERT_NOT_NULL(ver);
+  TEST_ASSERT_EQUAL_STRING("2.0", ver);
+
+  TEST_ASSERT_EQUAL_UINT32(1, gltf_doc_mesh_count(doc));
+  TEST_ASSERT_EQUAL_UINT32(1, gltf_doc_mesh_primitive_count(doc, 0));
+
+  gltf_span pos = {0};
+
+  rc = gltf_mesh_primitive_position_span(doc, 0, 0, &pos, &err);
+
+  if (rc != GLTF_OK) {
+    char buf[512];
+    snprintf(buf, sizeof(buf),
+             "position_span failed rc=%d msg=%s path=%s",
+             rc,
+             err.message ? err.message : "(null)",
+             err.path ? err.path : "(null)");
+    TEST_FAIL_MESSAGE(buf);
+  }
+
+  TEST_ASSERT_EQUAL_UINT32(3, pos.count);
+  TEST_ASSERT_EQUAL_UINT32(12, pos.elem_size);
+
+  float v1[3];
+  rc = gltf_mesh_primitive_read_position_f32(doc, 0, 0, 1, v1, &err);
+  TEST_ASSERT_EQUAL_INT(GLTF_OK, rc);
+
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, v1[0]);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, v1[1]);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, v1[2]);
+
+  uint32_t icount = 0;
+  rc = gltf_mesh_primitive_index_count(doc, 0, 0, &icount, &err);
+  TEST_ASSERT_EQUAL_INT(GLTF_OK, rc);
+  TEST_ASSERT_EQUAL_UINT32(3, icount);
+
+  uint32_t idx = 999;
+  rc = gltf_mesh_primitive_read_index_u32(doc, 0, 0, 2, &idx, &err);
+  TEST_ASSERT_EQUAL_INT(GLTF_OK, rc);
+  TEST_ASSERT_EQUAL_UINT32(2, idx);
+  
+  gltf_free(doc);
 }

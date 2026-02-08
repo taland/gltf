@@ -20,6 +20,25 @@
 #define GLTF_DOC_DEFAULT_SCENE_INVALID -1
 
 
+// Flags that tweak load behavior for specific container types.
+typedef enum gltf_load_ctx_flags {
+  GLTF_LOAD_CTX_NONE = 0,
+  GLTF_LOAD_CTX_GLB  = 1 << 0,  // forbid external uri, allow internal_bin
+} gltf_load_ctx_flags;
+
+// Optional context passed to loaders (bin override, doc dir, flags).
+typedef struct gltf_load_context {
+  // If non-NULL, buffers[0] without uri resolves to this memory (GLB BIN chunk).
+  const uint8_t* internal_bin;
+  uint32_t internal_bin_size;
+
+  // If non-NULL, used to resolve external relative uris (for .gltf).
+  const char* doc_dir;
+
+  // Optional behavior flags
+  uint32_t flags;
+} gltf_load_context;
+
 // Half-open range into doc->indices_u32: [first, first + count).
 typedef struct gltf_range_u32 {
   uint32_t first;
@@ -399,7 +418,7 @@ gltf_result gltf_parse_buffer_views(gltf_doc* doc,
 
 gltf_result gltf_parse_buffers(gltf_doc* doc,
                                yyjson_val* root,
-                               const char* doc_path,
+                               const gltf_load_context* ctx,
                                gltf_error* out_err);
 
 gltf_result gltf_parse_images(gltf_doc* doc,

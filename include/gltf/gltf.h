@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -107,6 +108,45 @@ typedef enum gltf_attr_semantic {
 //   - *out_doc is set to NULL
 //   - out_err (if non-NULL) is filled with error context (see gltf_error)
 gltf_result gltf_load_file(const char* path, gltf_doc** out_doc, gltf_error* out_err);
+
+// Loads a glTF 2.0 JSON document from an in-memory buffer.
+//
+// Success:
+// - returns GLTF_OK
+// - *out_doc is set to a valid document handle
+//
+// Failure:
+// - returns a non-OK code
+// - *out_doc is set to NULL
+// - out_err (if non-NULL) is filled with error context (see gltf_error)
+//
+// Notes:
+// - json_text must point to UTF-8 bytes; buffer need not be NUL-terminated.
+// - The document does NOT keep pointers into the provided buffer.
+gltf_result gltf_load_json_string(uint8_t* json_text,
+                                  uint32_t json_len,
+                                  gltf_doc** out_doc,
+                                  gltf_error* out_err);
+
+// Loads a glTF 2.0 binary container (.glb) from an in-memory buffer.
+//
+// Success:
+// - returns GLTF_OK
+// - *out_doc is set to a valid document handle
+//
+// Failure:
+// - returns a non-OK code
+// - *out_doc is set to NULL
+// - out_err (if non-NULL) is filled with error context (see gltf_error)
+//
+// Notes:
+// - 'data' must point to the full .glb file contents in little-endian layout.
+// - The document does NOT keep pointers into the provided memory.
+//   (All required data is copied into document-owned allocations.)
+gltf_result gltf_load_glb_bytes(const uint8_t* data,
+                                size_t size,
+                                gltf_doc** out_doc,
+                                gltf_error* out_err);
 
 // Frees all memory owned by the document.
 // Safe to call with NULL.

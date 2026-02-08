@@ -1074,9 +1074,9 @@ gltf_result gltf_parse_buffer_views(gltf_doc* doc,
 
 gltf_result gltf_parse_buffers(gltf_doc* doc,
                                yyjson_val* root,
-                               const char* doc_path,
+                               const gltf_load_context* ctx,
                                gltf_error* out_err) {
-  if (!doc || !root || !doc_path) {
+  if (!doc || !root || !ctx) {
     gltf_set_err(out_err, "invalid arguments", "root.buffers", 1, 1);
     return GLTF_ERR_INVALID;
   }
@@ -1100,6 +1100,11 @@ gltf_result gltf_parse_buffers(gltf_doc* doc,
     return GLTF_ERR_IO;
   }
 
+  if ((ctx->flags & GLTF_LOAD_CTX_GLB) && doc->buffer_count > 1) {
+    gltf_set_err(out_err, "multiple buffers not supported in GLB", "root.buffers", 1, 1);
+    return GLTF_ERR_PARSE;
+  }
+
   size_t buffer_idx, buffer_max;
   yyjson_val* buffer_val = NULL;
   yyjson_arr_foreach(buffers_val, buffer_idx, buffer_max, buffer_val) {
@@ -1118,12 +1123,39 @@ gltf_result gltf_parse_buffers(gltf_doc* doc,
 
     yyjson_val* uri_val = yyjson_obj_get(buffer_val, "uri");
     if (!uri_val) {
+      if ((ctx->flags & GLTF_LOAD_CTX_GLB) && buffer_idx == 0) {
+        if (!ctx->internal_bin || ctx->internal_bin_size == 0) {
+          gltf_set_err(out_err, "missing BIN chunk for buffers[0]", "root.buffers[0]", 1, 1);
+          return GLTF_ERR_PARSE;
+        }
+
+        if (doc->buffers[0].byte_length > ctx->internal_bin_size) {
+          gltf_set_err(out_err, "BIN smaller than buffers[0].byteLength", "root.buffers[0].byteLength", 1, 1);
+          return GLTF_ERR_PARSE;
+        }
+
+        doc->buffers[0].data = (uint8_t*)malloc((size_t)doc->buffers[0].byte_length);
+        if (!doc->buffers[0].data) {
+            gltf_set_err(out_err, "out of memory", "root.buffers[0].data", 1, 1);
+            return GLTF_ERR_IO;
+        }
+        memcpy(doc->buffers[0].data, ctx->internal_bin, (size_t)doc->buffers[0].byte_length);
+
+        // safe early exit because buffer_count == 1 is enforced
+        return GLTF_OK;
+      }
+
       gltf_set_err(out_err, "must be present", "root.buffers[].uri", 1, 1);
       return GLTF_ERR_PARSE;
     } else if (!yyjson_is_str(uri_val)) {
       gltf_set_err(out_err, "must be string", "root.buffers[].uri", 1, 1);
       return GLTF_ERR_PARSE;
     } else {
+      if (ctx->flags & GLTF_LOAD_CTX_GLB) {
+        gltf_set_err(out_err, "uri is not allowed for buffers in GLB", "root.buffers[].uri", 1, 1);
+        return GLTF_ERR_PARSE;
+      }
+
       const char* uri = yyjson_get_str(uri_val);
       gltf_str v = arena_strdup(&doc->arena, uri);
       if (!gltf_str_is_valid(v)) {
@@ -1135,8 +1167,17 @@ gltf_result gltf_parse_buffers(gltf_doc* doc,
       if (strncmp(uri, "data:", 5) != 0) {
         // External file
 
-        size_t dir_len = gltf_fs_dir_len(doc_path);
-        char* full = gltf_fs_join_dir_leaf(doc_path, dir_len, uri);
+        if (!ctx->doc_dir) {
+          gltf_set_err(out_err,
+                       "doc_dir is required to resolve external buffer uri",
+                       "root.buffers[].uri",
+                       1, 1);
+          return GLTF_ERR_INVALID;
+        }
+
+        size_t dir_len = gltf_fs_dir_len(ctx->doc_dir);
+        char* full = gltf_fs_join_dir_leaf(ctx->doc_dir, dir_len, uri);
+
         if (!full) {
           gltf_set_err(out_err, "out of memory", "root.buffers[].uri", 1, 1);
           return GLTF_ERR_IO;

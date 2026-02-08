@@ -93,6 +93,9 @@ if(GLTF_BUILD_EXAMPLES)
 
   add_executable(gltf_example_06_extract_textures examples/06_extract_textures/main.c)
   target_link_libraries(gltf_example_06_extract_textures PRIVATE gltf)
+
+  add_executable(gltf_example_07_glb_to_gltf examples/07_glb_to_gltf/main.c)
+  target_link_libraries(gltf_example_07_glb_to_gltf PRIVATE gltf yyjson::yyjson)
 endif()
 
 if(GLTF_BUILD_TESTS)
@@ -106,6 +109,7 @@ if(GLTF_BUILD_TESTS)
     tests/test_04_world_matrices_minimal_identity.c
     tests/test_05_materials.c
     tests/test_06_images_datauri.c
+    tests/test_07_load_glb.c
     third_party/unity/unity.c
   )
 

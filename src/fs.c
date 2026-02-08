@@ -19,13 +19,19 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifndef GLTF_FS_MAX_FILE_SIZE
+// Hard cap to keep APIs that use uint32_t lengths safe.
+#define GLTF_FS_MAX_FILE_SIZE ((size_t)0xFFFFFFFFu)
+#endif
+
 typedef enum gltf_fs_status {
   GLTF_FS_OK = 0,
   GLTF_FS_INVALID,
   GLTF_FS_IO,
   GLTF_FS_OOM,
   GLTF_FS_SIZE_MISMATCH,
-  GLTF_FS_TOO_LARGE
+  GLTF_FS_TOO_LARGE,
+  GLTF_FS_BAD_ARGUMENT
 } gltf_fs_status;
 
 
@@ -55,10 +61,23 @@ static int gltf_fs_is_abs(const char* path) {
 //   - Trailing separators are trimmed before scanning.
 //   - Both '/' and '\\' are treated as separators.
 size_t gltf_fs_dir_len(const char* path) {
-  if (!path) return 0;
+  if (!path || !path[0]) return 0;
+
   size_t n = strlen(path);
-  while (n > 0 && (path[n - 1] == '/' || path[n - 1] == '\\')) n--; // trim
-  for (size_t i = n; i > 0; i--) {
+  size_t end = n;
+
+  // Trim trailing separators but remember that we had them.
+  while (end > 0 && (path[end - 1] == '/' || path[end - 1] == '\\')) {
+    end--;
+  }
+
+  // If the path ended with a separator (directory path), keep one.
+  if (end != n) {
+    return end + 1;
+  }
+
+  // Find last separator before the leaf.
+  for (size_t i = end; i > 0; i--) {
     char c = path[i - 1];
     if (c == '/' || c == '\\') return i; // include separator
   }
@@ -183,4 +202,62 @@ int gltf_path_is_relative(const char* path) {
   }
 
   return 1;
+}
+
+// Reads whole file into memory.
+// - On success: *out_data is malloc-owned (free by caller), *out_size is set.
+// - On failure: *out_data == NULL, *out_size == 0.
+gltf_fs_status gltf_fs_read_file(const char* path, uint8_t** out_data, size_t* out_size) {
+  if (out_data) *out_data = NULL;
+  if (out_size) *out_size = 0;
+
+  if (!path || !out_data || !out_size) {
+    return GLTF_FS_BAD_ARGUMENT;
+  }
+
+  FILE* f = fopen(path, "rb");
+  if (!f) {
+    return GLTF_FS_IO;
+  }
+
+  if (fseek(f, 0, SEEK_END) != 0) {
+    fclose(f);
+    return GLTF_FS_IO;
+  }
+
+  long end = ftell(f);
+  if (end < 0) {
+    fclose(f);
+    return GLTF_FS_IO;
+  }
+
+  size_t size = (size_t)end;
+  if (size > GLTF_FS_MAX_FILE_SIZE) {
+    fclose(f);
+    return GLTF_FS_TOO_LARGE;
+  }
+
+  if (fseek(f, 0, SEEK_SET) != 0) {
+    fclose(f);
+    return GLTF_FS_IO;
+  }
+
+  uint8_t* buf = (uint8_t*)malloc(size ? size : 1); // malloc(0) can be NULL; avoid that
+  if (!buf) {
+    fclose(f);
+    return GLTF_FS_OOM;
+  }
+
+  size_t got = fread(buf, 1, size, f);
+  if (got != size) {
+    free(buf);
+    fclose(f);
+    return GLTF_FS_IO;
+  }
+
+  fclose(f);
+
+  *out_data = buf;
+  *out_size = size;
+  return GLTF_FS_OK;
 }

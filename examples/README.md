@@ -61,6 +61,18 @@ Usage:
 - If `out_dir` does not exist, pass `--force` to create it.
 - Output PNGs are named `image_XX_WIDTHxHEIGHT.png`.
 
+### 07_glb_to_gltf
+
+Converts a .glb to .gltf + .bin, rewriting `buffers[0]` to point at the new BIN file and updating `byteLength`.
+
+Usage:
+
+```sh
+./build/bin/gltf_example_07_glb_to_gltf <input.glb> <output_base>
+```
+
+This writes `<output_base>.gltf` and `<output_base>.bin` in the current directory.
+
 ## Notes
 
 - macOS/Linux binaries are in `build/bin/`.
