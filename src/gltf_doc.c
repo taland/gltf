@@ -204,11 +204,11 @@ static gltf_result gltf_load_json_string_ex(uint8_t* json_text,
   }
 
   const char* version = yyjson_get_str(version_val);
-  if (strlen(version) >= sizeof(doc->asset_version)) {
+  size_t version_len = strlen(version);
+  if (version_len >= sizeof(doc->asset_version)) {
     GLTF_FAIL(GLTF_ERR_PARSE, "too long", "root.asset.version", 1, 1);
   }
-  (void)strncpy(doc->asset_version, version, sizeof(doc->asset_version) - 1);
-  doc->asset_version[sizeof(doc->asset_version) - 1] = '\0';
+  memcpy(doc->asset_version, version, version_len + 1);
 
   yyjson_val* generator_val = yyjson_obj_get(asset_val, "generator");
   if (generator_val && yyjson_is_str(generator_val)) {

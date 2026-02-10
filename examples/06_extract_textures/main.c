@@ -6,6 +6,9 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifdef _WIN32
+#include <direct.h>
+#endif
 
 static void die(const char* msg) {
   fprintf(stderr, "%s\n", msg);
@@ -28,9 +31,15 @@ static int ensure_dir(const char* path) {
 
 static int dir_exists(const char* path) {
   if (!path || path[0] == '\0') return 0;
+#ifdef _WIN32
+  struct _stat st;
+  if (_stat(path, &st) != 0) return 0;
+  return (st.st_mode & _S_IFDIR) ? 1 : 0;
+#else
   struct stat st;
   if (stat(path, &st) != 0) return 0;
   return S_ISDIR(st.st_mode) ? 1 : 0;
+#endif
 }
 
 typedef struct app_args {

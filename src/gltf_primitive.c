@@ -257,16 +257,16 @@ gltf_result gltf_mesh_primitive_read_position_f32(const gltf_doc* doc,
   const uint32_t stride = (span.stride != 0) ? span.stride : elem_size;
   const uint8_t* vertex_ptr = (const uint8_t*)span.ptr + (size_t)vertex_i * (size_t)stride;
   for (uint32_t c = 0; c < 3; c++) {
-    gltf_result r = gltf_decode_component_to_f32(
+    gltf_result decode_r = gltf_decode_component_to_f32(
       vertex_ptr + (size_t)c * (size_t)comp_size,
       a->component_type,
       a->normalized,
       &out_xyz[c]
     );
 
-    if (r != GLTF_OK) {
+    if (decode_r != GLTF_OK) {
       gltf_set_err(out_err, "failed to decode position component", "root.accessors[]", 1, 1);
-      return r;
+      return decode_r;
     }
   }
   return GLTF_OK;

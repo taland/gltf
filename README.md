@@ -64,6 +64,12 @@ Run via CTest:
 ctest --test-dir build [--output-on-failure]
 ```
 
+Multi-config generators (Visual Studio) require a configuration:
+
+```sh
+ctest --test-dir build -C Debug [--output-on-failure]
+```
+
 Or run the test binary directly:
 
 ```sh
